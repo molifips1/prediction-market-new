@@ -579,16 +579,16 @@
       { id: 'b4', label: `Over ${fv(Math.round(baseCount * 1.5))}` }
     ];
 
-    // Seed mock visual prices per Polymarket configuration cents style ($0.01 - $0.99)
+    // Set stable default starting prices (e.g., equal 50/50 odds or balanced distribution)
     container.innerHTML = brackets.map((b, index) => {
-      const yesPrice = Math.max(12, Math.min(85, Math.round(55 - (index * 12) + (Math.random() * 8))));
-      const noPrice = 100 - yesPrice;
+      const yesPrice = 50; // Standard 50¢ baseline for unweighted markets
+      const noPrice = 50;
 
       return `
         <div class="bucket-card">
           <div class="bucket-info">
             <span class="bucket-label">${b.label}</span>
-            <span class="bucket-odds">Volume: $${(Math.random() * 4500 + 500).toFixed(2)}</span>
+            <span class="bucket-odds">Volume: $0.00</span>
           </div>
           <div class="bucket-actions">
             <button class="bet-btn yes" onclick="executeBet('${b.label}', 'YES', ${yesPrice})">
