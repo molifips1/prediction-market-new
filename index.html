@@ -346,24 +346,7 @@
 
 <script>
   const KICK = 'https://kick.com/';
-  const PROXIES = [
-    async (u) => {
-      const r = await fetch(`https://corsproxy.io/?${encodeURIComponent(u)}`);
-      if (!r.ok) throw new Error('fail');
-      return r.json();
-    },
-    async (u) => {
-      const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(u)}`);
-      if (!r.ok) throw new Error('fail');
-      const w = await r.json();
-      return JSON.parse(w.contents);
-    },
-    async (u) => {
-      const r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`);
-      if (!r.ok) throw new Error('fail');
-      return r.json();
-    },
-  ];
+  const WORKER_URL = 'https://blue-unit-891d.apetersen280.workers.dev/';
 
   let streamers = JSON.parse(localStorage.getItem('mykick_streamers') || 'null') || [
     { username: 'haddzy',       display: 'Haddzy' },
@@ -386,23 +369,26 @@
 
   /* FETCH */
   async function fetchOne(username) {
-    const target = `https://kick.com/api/v1/channels/${username}`;
-    for (const proxy of PROXIES) {
-      try {
-        const d = await proxy(target);
-        if (!d || d.message) continue;
-        return {
-          isLive: !!d.livestream,
-          title: d.livestream?.session_title || '',
-          viewers: d.livestream?.viewer_count || 0,
-          category: d.livestream?.categories?.[0]?.name || d.recent_categories?.[0]?.name || '',
-          thumbnail: d.livestream?.thumbnail?.url || null,
-          avatar: d.user?.profile_pic || null,
-          displayName: d.user?.username || username,
-        };
-      } catch { continue; }
+    try {
+      const r = await fetch(`${WORKER_URL}?user=${encodeURIComponent(username)}`);
+      if (!r.ok) throw new Error('Proxy error');
+      
+      const d = await r.json();
+      if (!d || d.message) return null;
+      
+      return {
+        isLive: !!d.livestream,
+        title: d.livestream?.session_title || '',
+        viewers: d.livestream?.viewer_count || 0,
+        category: d.livestream?.categories?.[0]?.name || d.recent_categories?.[0]?.name || '',
+        thumbnail: d.livestream?.thumbnail?.url || null,
+        avatar: d.user?.profile_pic || null,
+        displayName: d.user?.username || username,
+      };
+    } catch (e) {
+      console.error(`Failed to fetch ${username}:`, e);
+      return null;
     }
-    return null;
   }
 
   async function loadAll() {
