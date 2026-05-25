@@ -146,9 +146,6 @@
     .card-title { font-size: 12px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .card-footer { display: flex; align-items: center; justify-content: space-between; }
     .card-category { font-size: 12px; color: var(--text-muted); }
-    .card-remove { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; border-radius: 4px; transition: color .15s, background .15s; flex-shrink: 0; }
-    .card-remove:hover { color: var(--text-primary); background: rgba(255,255,255,.06); }
-    .card-remove svg { width: 16px; height: 16px; display: block; }
 
     /* POLYMARKET PARADIGM SPLIT PLATFORM */
     #player-view {
@@ -903,9 +900,6 @@
             <div class="card-name">${name}</div>
             <div class="card-title">${d?.title || (isLive ? 'Streaming now' : 'Currently offline')}</div>
           </div>
-          <button class="card-remove" onclick="event.stopPropagation();removeStreamer('${s.username}')" title="Unfollow">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
         </div>
         <div class="card-footer">
           <div class="card-category">${d?.category || ''}</div>
@@ -1003,15 +997,6 @@
     document.getElementById('main-view').classList.remove('hidden');
     document.getElementById('player-view').classList.remove('active');
     renderSidebar();
-  }
-
-  /* ACTIONS */
-  function removeStreamer(u) {
-    if (currentPlayer === u) goHome();
-    streamers = streamers.filter(s => s.username !== u);
-    delete data[u];
-    save(); render();
-    toast(`Unfollowed ${u}`);
   }
 
   /* FILTER / SEARCH */
