@@ -284,20 +284,18 @@
 <div class="layout">
   <aside id="sidebar"></aside>
 
-  <!-- BROWSE VIEW -->
   <main id="main-view">
     <div class="page-header">
       <h1 class="page-title">Following <span id="live-count"></span></h1>
     </div>
     <div class="filter-bar">
-      <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
-      <button class="filter-btn" onclick="setFilter('live', this)">Live</button>
+      <button class="filter-btn" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn active" onclick="setFilter('live', this)">Live</button>
       <button class="filter-btn" onclick="setFilter('offline', this)">Offline</button>
     </div>
     <div class="grid" id="grid"></div>
   </main>
 
-  <!-- PLAYER VIEW -->
   <div id="player-view">
     <div class="player-topbar">
       <button class="player-back" onclick="goHome()">
@@ -380,7 +378,7 @@
     { username: 'kyootbot',      display: 'Kyootbot' }
   ];
   let data = {};
-  let filter = 'all';
+  let filter = 'live';
   let searchQ = '';
   let currentPlayer = null;
 
