@@ -60,7 +60,7 @@
     .nav-logo-icon { width: 34px; height: 34px; background: var(--green); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; }
     .nav-logo-icon svg { width: 18px; height: 18px; }
     .nav-logo-text { font-size: 18px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.3px; }
-    .nav-search { flex: 1; max-width: 440px; margin: 0 auto; position: relative; }
+    .nav-search { flex: 1; max-width: 500px; margin: 0 auto; position: relative; }
     .nav-search input {
       width: 100%; height: 36px;
       background: var(--bg-input); border: 1px solid var(--border);
@@ -71,15 +71,6 @@
     .nav-search input:focus { border-color: var(--green); }
     .nav-search input::placeholder { color: var(--text-muted); }
     .nav-search-icon { position: absolute; right: 13px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
-    .nav-add-btn {
-      display: flex; align-items: center; gap: 6px;
-      background: var(--green); color: #0a0b0e;
-      border: none; border-radius: var(--radius-sm);
-      padding: 8px 14px; font-family: inherit; font-size: 13px; font-weight: 600;
-      cursor: pointer; white-space: nowrap; transition: opacity .15s; flex-shrink: 0;
-    }
-    .nav-add-btn:hover { opacity: .88; }
-    .nav-add-btn svg { width: 16px; height: 16px; }
 
     .nav-wallet-btn {
       display: flex; align-items: center; gap: 6px;
@@ -258,7 +249,7 @@
     .player-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary); }
     .player-category { font-size: 13px; color: var(--text-muted); }
 
-    /* STACKED LIST BRACKETS (Polymarket Left-Side Rows) */
+    /* STACKED LIST BRACKETS */
     .market-section-header {
       font-size: 18px;
       font-weight: 600;
@@ -469,21 +460,6 @@
       border-radius: var(--radius-lg);
     }
 
-    /* MODAL */
-    .modal-overlay { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.7); align-items: center; justify-content: center; }
-    .modal-overlay.open { display: flex; }
-    .modal { background: var(--bg-modal); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; width: 100%; max-width: 380px; }
-    .modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
-    .modal p { font-size: 13px; color: var(--text-secondary); margin-bottom: 18px; }
-    .modal input { width: 100%; height: 40px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 14px; color: var(--text-primary); font-family: inherit; font-size: 14px; outline: none; margin-bottom: 14px; transition: border-color .2s; }
-    .modal input:focus { border-color: var(--green); }
-    .modal input::placeholder { color: var(--text-muted); }
-    .modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
-    .modal-cancel { padding: 9px 18px; background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-secondary); font-family: inherit; font-size: 13px; cursor: pointer; transition: all .15s; }
-    .modal-cancel:hover { border-color: var(--border-hover); color: var(--text-primary); }
-    .modal-confirm { padding: 9px 18px; background: var(--green); border: none; border-radius: var(--radius-sm); color: #0a0b0e; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
-    .modal-confirm:hover { opacity: .88; }
-
     /* EMPTY */
     .empty { grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted); }
     .empty svg { width: 48px; height: 48px; opacity: .3; display: block; margin: 0 auto 14px; }
@@ -523,10 +499,6 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     </span>
   </div>
-  <button class="nav-add-btn" onclick="openModal()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-    Follow
-  </button>
   <button id="wallet-btn" class="nav-wallet-btn" onclick="connectWallet()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3"/></svg>
     <span id="wallet-btn-text">Connect Wallet</span>
@@ -603,18 +575,6 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="modal" onclick="closeModalOutside(event)">
-  <div class="modal">
-    <h2>Follow a streamer</h2>
-    <p>Enter their Kick username to add them to your list.</p>
-    <input type="text" id="modal-input" placeholder="e.g. xqc" onkeydown="if(event.key==='Enter')confirmAdd()" />
-    <div class="modal-btns">
-      <button class="modal-cancel" onclick="closeModal()">Cancel</button>
-      <button class="modal-confirm" onclick="confirmAdd()">Follow</button>
-    </div>
-  </div>
-</div>
-
 <div id="toast"></div>
 
 <script>
@@ -633,11 +593,6 @@
     { username: 'generalqw77',       display: 'generalqw77' },
     { username: 'roshtein',       display: 'roshtein' },
     { username: 'maherco',       display: 'maherco' },
-    { username: 'tyceno',       display: 'Tyceno' },
-    { username: 'casinodaddy',       display: 'CasinoDaddy' },
-    { username: 'l1way69',       display: 'l1way69' },
-    { username: 'kingkulbik',       display: 'kingkulbik' },
-    { username: 'borodach777',       display: 'Borodach777' },
     { username: 'kyootbot',      display: 'Kyootbot' }
   ];
   let data = {};
@@ -719,7 +674,6 @@
     const container = document.getElementById('market-buckets-list');
     const streamInfo = data[username];
     
-    // Reset modal states when changing targets
     activeMarketSelection = null;
     resetOrderSlipDefault();
 
@@ -914,7 +868,7 @@
       grid.innerHTML = `<div class="empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <p>${isEmpty ? "You're not following anyone yet" : "No streamers match your filter"}</p>
-        <small>${isEmpty ? 'Click Follow to add your first streamer' : 'Try a different filter'}</small>
+        <small>${isEmpty ? 'Try a different filter' : ''}</small>
       </div>`;
       return;
     }
@@ -1059,23 +1013,6 @@
     save(); render();
     toast(`Unfollowed ${u}`);
   }
-
-  async function addStreamer(username) {
-    const u = username.toLowerCase().trim();
-    if (!u) return;
-    if (streamers.find(s => s.username === u)) { toast('Already following'); return; }
-    streamers.push({ username: u, display: u.charAt(0).toUpperCase() + u.slice(1) });
-    save(); render();
-    data[u] = await fetchOne(u);
-    render();
-    toast(`Followed ${u}`);
-  }
-
-  /* MODAL */
-  function openModal() { document.getElementById('modal').classList.add('open'); setTimeout(() => document.getElementById('modal-input').focus(), 50); }
-  function closeModal() { document.getElementById('modal').classList.remove('open'); document.getElementById('modal-input').value = ''; }
-  function closeModalOutside(e) { if (e.target === document.getElementById('modal')) closeModal(); }
-  function confirmAdd() { const val = document.getElementById('modal-input').value.trim(); if (val) { addStreamer(val); closeModal(); } }
 
   /* FILTER / SEARCH */
   function setFilter(f, btn) {
