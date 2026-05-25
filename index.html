@@ -35,6 +35,7 @@
       --sidebar-w: 240px;
       --yes-blue: #2775ca;
       --no-pink: #df4355;
+      --polymarket-blue: #004bff;
     }
 
     html { scroll-behavior: smooth; }
@@ -255,7 +256,7 @@
       background: var(--bg-nav);
       display: flex;
       flex-direction: column;
-      min-width: 320px;
+      min-width: 340px;
       overflow-y: auto;
       padding: 20px;
     }
@@ -272,6 +273,127 @@
       color: var(--text-secondary);
       margin-top: 4px;
     }
+
+    /* POLYMARKET ORDER SLIP COMPONENT */
+    .order-slip-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-hover);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .order-slip-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .order-slip-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: var(--bg-base);
+      padding: 4px;
+      border-radius: var(--radius-sm);
+    }
+    .order-tab {
+      border: none;
+      padding: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .order-tab.yes-active {
+      background: var(--yes-blue);
+      color: white;
+    }
+    .order-tab.no-active {
+      background: var(--no-pink);
+      color: white;
+    }
+    .order-tab.inactive {
+      background: transparent;
+      color: var(--text-muted);
+    }
+    .order-input-container {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .order-input-container input {
+      width: 100%;
+      height: 48px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0 60px 0 16px;
+      color: var(--text-primary);
+      font-size: 20px;
+      font-weight: 600;
+      outline: none;
+      font-family: inherit;
+    }
+    .order-input-container input:focus {
+      border-color: var(--polymarket-blue);
+    }
+    .order-currency-label {
+      position: absolute;
+      right: 16px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    .order-quick-amounts {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .quick-amt-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 6px 0;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .quick-amt-btn:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+    .order-summary-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .order-summary-value {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .trade-submit-btn {
+      width: 100%;
+      height: 44px;
+      background: var(--polymarket-blue);
+      color: white;
+      border: none;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .trade-submit-btn:hover { opacity: 0.9; }
+
     .market-buckets {
       display: flex;
       flex-direction: column;
@@ -285,6 +407,10 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      transition: border-color 0.15s;
+    }
+    .bucket-card.selected {
+      border-color: var(--polymarket-blue);
     }
     .bucket-info {
       display: flex;
@@ -317,18 +443,26 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      transition: opacity 0.15s;
+      transition: all 0.15s;
     }
     .bet-btn:hover { opacity: 0.88; }
     .bet-btn.yes {
-      background: rgba(39, 117, 202, 0.15);
+      background: rgba(39, 117, 202, 0.08);
       border: 1px solid var(--yes-blue);
       color: #6fb2ff;
     }
+    .bet-btn.yes.active {
+      background: var(--yes-blue);
+      color: white;
+    }
     .bet-btn.no {
-      background: rgba(223, 67, 85, 0.15);
+      background: rgba(223, 67, 85, 0.08);
       border: 1px solid var(--no-pink);
       color: #ff8896;
+    }
+    .bet-btn.no.active {
+      background: var(--no-pink);
+      color: white;
     }
     .bet-btn-price {
       font-size: 11px;
@@ -453,8 +587,11 @@
       <div class="market-panel">
         <div class="market-header">
           <h3>Viewer Bracket Market</h3>
-          <div class="market-subtitle">What will the viewer count be at the end of this hour? (USDC via Polygon)</div>
+          <div class="market-subtitle">What will the viewer count be at the end of this hour?</div>
         </div>
+
+        <div id="order-slip-container" style="display: none;"></div>
+
         <div class="market-buckets" id="market-buckets-list">
           </div>
       </div>
@@ -501,6 +638,9 @@
   let currentPlayer = null;
   let userWalletAddress = null;
 
+  // Track active bidding state variables
+  let activeMarketSelection = null;
+
   function save() { localStorage.setItem('mykick_streamers', JSON.stringify(streamers)); }
 
   /* WEB3 CONNECTIONS */
@@ -514,7 +654,6 @@
       const accounts = await provider.send("eth_requestAccounts", []);
       userWalletAddress = accounts[0];
       
-      // Force user check for Polygon Network
       const network = await provider.getNetwork();
       if (network.chainId !== 137n) {
         try {
@@ -555,7 +694,6 @@
     }
   }
 
-  // Monitor account switches live
   if (window.ethereum) {
     window.ethereum.on('accountsChanged', (accounts) => {
       userWalletAddress = accounts.length > 0 ? accounts[0] : null;
@@ -569,7 +707,10 @@
     const container = document.getElementById('market-buckets-list');
     const streamInfo = data[username];
     
-    // Default fallback bracket definitions if streamer is offline
+    // Clear out active layout slips if flipping streamers
+    document.getElementById('order-slip-container').style.display = 'none';
+    activeMarketSelection = null;
+
     const baseCount = streamInfo?.viewers || 1500;
     
     const brackets = [
@@ -579,23 +720,22 @@
       { id: 'b4', label: `Over ${fv(Math.round(baseCount * 1.5))}` }
     ];
 
-    // Set stable default starting prices (e.g., equal 50/50 odds or balanced distribution)
     container.innerHTML = brackets.map((b, index) => {
-      const yesPrice = 50; // Standard 50¢ baseline for unweighted markets
+      const yesPrice = 50; 
       const noPrice = 50;
 
       return `
-        <div class="bucket-card">
+        <div class="bucket-card" id="card-${b.id}">
           <div class="bucket-info">
             <span class="bucket-label">${b.label}</span>
             <span class="bucket-odds">Volume: $0.00</span>
           </div>
           <div class="bucket-actions">
-            <button class="bet-btn yes" onclick="executeBet('${b.label}', 'YES', ${yesPrice})">
+            <button class="bet-btn yes" id="btn-yes-${b.id}" onclick="selectBetSlip('${b.id}', '${b.label}', 'YES', ${yesPrice})">
               <span>Yes</span>
               <span class="bet-btn-price">¢${yesPrice}</span>
             </button>
-            <button class="bet-btn no" onclick="executeBet('${b.label}', 'No', ${noPrice})">
+            <button class="bet-btn no" id="btn-no-${b.id}" onclick="selectBetSlip('${b.id}', '${b.label}', 'NO', ${noPrice})">
               <span>No</span>
               <span class="bet-btn-price">¢${noPrice}</span>
             </button>
@@ -605,13 +745,99 @@
     }).join('');
   }
 
-  function executeBet(bracket, outcome, currentOdds) {
+  /* OPEN AND POPULATE ORDER BID SYSTEM */
+  function selectBetSlip(bucketId, label, outcome, pricePerShare) {
+    activeMarketSelection = { bucketId, label, outcome, pricePerShare };
+
+    // Reset layout highlighting classes
+    document.querySelectorAll('.bucket-card').forEach(el => el.classList.remove('selected'));
+    document.querySelectorAll('.bet-btn').forEach(el => el.classList.remove('active'));
+
+    document.getElementById(`card-${bucketId}`).classList.add('selected');
+    if (outcome === 'YES') {
+      document.getElementById(`btn-yes-${bucketId}`).classList.add('active');
+    } else {
+      document.getElementById(`btn-no-${bucketId}`).classList.add('active');
+    }
+
+    const slipContainer = document.getElementById('order-slip-container');
+    slipContainer.style.display = 'block';
+
+    slipContainer.innerHTML = `
+      <div class="order-slip-card">
+        <div class="order-slip-row" style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="order-slip-title">${label}</span>
+          <span style="font-size: 11px; color: var(--text-muted); cursor: pointer;" onclick="closeBetSlip()">✕ Close</span>
+        </div>
+        
+        <div class="order-slip-tabs">
+          <button class="order-tab ${outcome === 'YES' ? 'yes-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', '${label}', 'YES', 50)">Buy Yes</button>
+          <button class="order-tab ${outcome === 'NO' ? 'no-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', '${label}', 'NO', 50)">Buy No</button>
+        </div>
+
+        <div class="order-input-container">
+          <input type="number" id="order-amount-input" value="10" min="1" placeholder="0" oninput="calculateShares()">
+          <span class="order-currency-label">USDC</span>
+        </div>
+
+        <div class="order-quick-amounts">
+          <button class="quick-amt-btn" onclick="addOrderAmount(1)">+$1</button>
+          <button class="quick-amt-btn" onclick="addOrderAmount(5)">+$5</button>
+          <button class="quick-amt-btn" onclick="addOrderAmount(10)">+$10</button>
+          <button class="quick-amt-btn" onclick="addOrderAmount(100)">+$100</button>
+        </div>
+
+        <div class="order-summary-row" style="margin-top: 6px;">
+          <span>Avg. Price</span>
+          <span class="order-summary-value">¢${pricePerShare}</span>
+        </div>
+
+        <div class="order-summary-row">
+          <span>Est. Shares Received</span>
+          <span class="order-summary-value" id="est-shares-val">20.00</span>
+        </div>
+
+        <button class="trade-submit-btn" onclick="submitFinalBet()">Submit Trade</button>
+      </div>
+    `;
+    calculateShares();
+  }
+
+  function closeBetSlip() {
+    document.getElementById('order-slip-container').style.display = 'none';
+    document.querySelectorAll('.bucket-card').forEach(el => el.classList.remove('selected'));
+    document.querySelectorAll('.bet-btn').forEach(el => el.classList.remove('active'));
+    activeMarketSelection = null;
+  }
+
+  function addOrderAmount(val) {
+    const input = document.getElementById('order-amount-input');
+    const current = parseFloat(input.value) || 0;
+    input.value = current + val;
+    calculateShares();
+  }
+
+  function calculateShares() {
+    if (!activeMarketSelection) return;
+    const usdAmount = parseFloat(document.getElementById('order-amount-input').value) || 0;
+    const priceCents = activeMarketSelection.pricePerShare;
+    
+    // Each share costs priceCents / 100 dollars. Shares = Total USD / Cost Per Share
+    const totalShares = usdAmount / (priceCents / 100);
+    document.getElementById('est-shares-val').textContent = totalShares.toFixed(2);
+  }
+
+  function submitFinalBet() {
     if (!userWalletAddress) {
       connectWallet();
       return;
     }
-    // Framework alert ready for contract routing connection next step
-    toast(`Initiating ${outcome} bet for bracket [${bracket}]`);
+    const usdAmount = parseFloat(document.getElementById('order-amount-input').value) || 0;
+    if (usdAmount <= 0) {
+      toast("Please enter a valid investment amount!");
+      return;
+    }
+    toast(`Routing contract approval: Depositing $${usdAmount.toFixed(2)} USDC on ${activeMarketSelection.outcome} shares.`);
   }
 
   /* FETCH */
@@ -645,7 +871,8 @@
       render();
       if (currentPlayer === s.username) {
         updatePlayerMeta(s.username);
-        loadMarketLayout(s.username);
+        // Do not stomp active bidding choices if the API refresh loop runs
+        if (!activeMarketSelection) loadMarketLayout(s.username);
       }
     }));
   }
