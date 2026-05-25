@@ -556,6 +556,27 @@
           <div class="market-buckets-list-wrapper" id="market-buckets-list">
             </div>
         </div>
+
+        <div style="margin-top: 24px; padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);">
+          <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px;">
+            Market Rules
+          </div>
+          <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; display: flex; flex-direction: column; gap: 12px;">
+            <p>
+              This market resolves to "Yes" for the specific bracket that matches the live viewer count fetched during the final minute of the specified betting hour. All other brackets within this event will resolve to "No".
+            </p>
+            <p>
+              <strong>Anti-Fraud Termination Clause:</strong> If the streamer ends the broadcast unexpectedly or goes completely offline prior to the final 15 minutes of the designated betting hour, this market will be declared <strong>Void</strong>. All placed bets will be automatically invalidated, and 100% of the collateral principal will be unlocked for direct wallet refund withdrawals. Streamers are blocked from force-closing markets they trade in.
+            </p>
+            <p>
+              <strong>Resolution Source:</strong> The sole resolution source for this market is the official channel metrics verified via the platform's automated architecture proxy routing at <code style="color: var(--green-text); background: var(--bg-base); padding: 2px 6px; border-radius: 4px; font-size: 11px;">blue-unit-891d.apetersen280.workers.dev</code>. Alternate tracking sites or personal stream screenshots are not recognized for market settlement.
+            </p>
+            <div style="margin-top: 6px; font-size: 11px; color: var(--text-muted); display: flex; gap: 16px;">
+              <span><strong>Oracle Address:</strong> <span style="color: var(--polygon-purple);">0x65469da5...2301</span></span>
+              <span><strong>Collateral asset:</strong> USDC (Polygon)</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="market-right-sticky-panel">
@@ -576,7 +597,7 @@
 
 <script>
   const KICK = 'https://kick.com/';
-  const WORKER_URL = 'https://blue-unit-891d.apetersen280.workers.dev/';
+  const WORKER_URL = 'https://blue-unit-891d.apetersen280.workers.dev/'; //
   
   const POLYGON_CHAIN_ID = '0x137'; 
 
@@ -857,6 +878,7 @@
     return matchFilter && matchSearch;
   }
 
+  style = document.createElement('style');
   function renderGrid() {
     const grid = document.getElementById('grid');
     const shown = streamers.filter(visible);
@@ -997,6 +1019,15 @@
     document.getElementById('main-view').classList.remove('hidden');
     document.getElementById('player-view').classList.remove('active');
     renderSidebar();
+  }
+
+  /* ACTIONS */
+  function removeStreamer(u) {
+    if (currentPlayer === u) goHome();
+    streamers = streamers.filter(s => s.username !== u);
+    delete data[u];
+    save(); render();
+    toast(`Unfollowed ${u}`);
   }
 
   /* FILTER / SEARCH */
