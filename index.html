@@ -614,7 +614,7 @@
               <strong>Resolution Source:</strong> The sole resolution source for this market is the official channel metrics verified via the platform's automated architecture proxy routing at <code style="color: var(--green-text); background: var(--bg-base); padding: 2px 6px; border-radius: 4px; font-size: 11px;">blue-unit-891d.apetersen280.workers.dev</code>. Alternate tracking sites or personal stream screenshots are not recognized for market settlement.
             </p>
             <div style="margin-top: 6px; font-size: 11px; color: var(--text-muted); display: flex; gap: 16px;">
-              <span><strong>Oracle Address:</strong> <span style="color: var(--polygon-purple);">0x4b2641a42c708Ca2DaeE7153da63A75846174b8b</span></span>
+              <span><strong>Oracle Address:</strong> <span style="color: var(--polygon-purple);">0xB4815458f9Ca870a0bbe9d15c2AA33F814fEE7fA</span></span>
               <span><strong>Collateral asset:</strong> USDC (Polygon)</span>
             </div>
           </div>
@@ -693,57 +693,7 @@
 
   /* WEB3 CONNECTIONS */
   async function connectWallet() {
-    // 1. Direct browser extension shortcut check (MetaMask, Coinbase Wallet, etc.)
-    if (window.ethereum) {
-      try {
-        const rawAccounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        userWalletAddress = rawAccounts[0];
-        activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
-        
-        const walletNetwork = await activeEthersProviderInstance.getNetwork();
-        if (walletNetwork.chainId !== 137n) {
-          try {
-            await window.ethereum.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: POLYGON_CHAIN_ID }],
-            });
-          } catch (switchError) {
-            if (switchError.code === 4902) {
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: POLYGON_CHAIN_ID,
-                  chainName: 'Polygon Mainnet',
-                  nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
-                  rpcUrls: ['https://polygon-rpc.com/'],
-                  blockExplorerUrls: ['https://polygonscan.com/']
-                }],
-              });
-            } else {
-              throw switchError;
-            }
-          }
-          activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
-        }
-        
-        updateWalletUI();
-        if (activeMarketSelection) {
-          selectBetSlip(
-            activeMarketSelection.bucketId, 
-            activeMarketSelection.numericIdx, 
-            activeMarketSelection.label, 
-            activeMarketSelection.outcome, 
-            activeMarketSelection.pricePerShare
-          );
-        }
-        toast("Wallet Connected! 🎉");
-        return;
-      } catch (err) {
-        console.log("Extension connection bypassed, initializing discovery card popup...", err);
-      }
-    }
-
-    // 2. Fallback Multi-Wallet Modal Interface Pipeline
+    // Force Multi-Wallet Modal Interface Pipeline directly
     if (!universalModalEngine) {
       initMultiWalletPopup();
     }
@@ -771,7 +721,7 @@
         // Safeguard to drop watcher tracking after 60 seconds of inactivity
         setTimeout(() => clearInterval(connectionSyncLoop), 60000);
       } else {
-        toast("Please install MetaMask or a web3 browser wallet expansion card.");
+        toast("Universal connect component unavailable.");
       }
     } catch (modalErr) {
       console.error(modalErr);
@@ -1185,6 +1135,7 @@
         }
       } catch(e) {}
     }, 4000);
+    iframe.onload = null;
     iframe.onerror = () => { clearTimeout(timer); showBlocked(username); };
 
     updatePlayerMeta(username);
