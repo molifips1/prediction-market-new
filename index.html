@@ -680,11 +680,13 @@
       return;
     }
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const accounts = await provider.send("eth_requestAccounts", []);
+      // Direct raw RPC account extraction to circumvent extension UI blocks
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       userWalletAddress = accounts[0];
       
+      const provider = new ethers.BrowserProvider(window.ethereum);
       const network = await provider.getNetwork();
+      
       if (network.chainId !== 137n) {
         try {
           await window.ethereum.request({
@@ -692,7 +694,8 @@
             params: [{ chainId: POLYGON_CHAIN_ID }],
           });
         } catch (switchError) {
-          if (switchError.code === 4902) {
+          if (switchError.code === 4001) throw switchError;
+          try {
             await window.ethereum.request({
               method: 'wallet_addEthereumChain',
               params: [{
@@ -703,18 +706,30 @@
                 blockExplorerUrls: ['https://polygonscan.com/']
               }],
             });
+          } catch (addError) {
+            throw addError;
           }
         }
       }
       
       updateWalletUI();
       if (activeMarketSelection) {
-        selectBetSlip(activeMarketSelection.bucketId, activeMarketSelection.numericIdx, activeMarketSelection.label, activeMarketSelection.outcome, activeMarketSelection.pricePerShare);
+        selectBetSlip(
+          activeMarketSelection.bucketId, 
+          activeMarketSelection.numericIdx, 
+          activeMarketSelection.label, 
+          activeMarketSelection.outcome, 
+          activeMarketSelection.pricePerShare
+        );
       }
-      toast("Wallet Connected to Polygon!");
+      toast("Wallet Connected to Polygon! 🎉");
     } catch (err) {
       console.error(err);
-      toast("Connection Failed.");
+      if (err.code === 4001) {
+        toast("Connection request cancelled by user.");
+      } else {
+        toast(`Error: ${err.message || "Connection Failed."}`);
+      }
     }
   }
 
@@ -732,7 +747,13 @@
       userWalletAddress = accounts.length > 0 ? accounts[0] : null;
       updateWalletUI();
       if (activeMarketSelection) {
-        selectBetSlip(activeMarketSelection.bucketId, activeMarketSelection.numericIdx, activeMarketSelection.label, activeMarketSelection.outcome, activeMarketSelection.pricePerShare);
+        selectBetSlip(
+          activeMarketSelection.bucketId, 
+          activeMarketSelection.numericIdx, 
+          activeMarketSelection.label, 
+          activeMarketSelection.outcome, 
+          activeMarketSelection.pricePerShare
+        );
       }
     });
     window.ethereum.on('chainChanged', () => window.location.reload());
