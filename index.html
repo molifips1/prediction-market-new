@@ -8,7 +8,6 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.6.2/dist/index.umd.min.js"></script>
   
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -149,6 +148,47 @@
     .card-title { font-size: 12px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .card-footer { display: flex; align-items: center; justify-content: space-between; }
     .card-category { font-size: 12px; color: var(--text-muted); }
+
+    /* NATIVE MULTI-WALLET WALLET SELECTION SELECTION MODAL SYSTEM */
+    .custom-wallet-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
+      display: none; align-items: center; justify-content: center;
+      z-index: 2000; backdrop-filter: blur(4px);
+    }
+    .custom-wallet-modal-overlay.open { display: flex; }
+    .custom-wallet-card-container {
+      background: #12131a; border: 1px solid #252736;
+      width: 100%; max-width: 420px; border-radius: 20px;
+      padding: 24px; position: relative; box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    }
+    .custom-wallet-modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .custom-wallet-modal-title { font-size: 18px; font-weight: 600; color: #fff; }
+    .custom-wallet-close-x {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 20px; cursor: pointer; transition: color 0.15s;
+    }
+    .custom-wallet-close-x:hover { color: #fff; }
+    .custom-wallet-options-stack { display: flex; flex-direction: column; gap: 10px; }
+    .wallet-option-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #1c1e29; border: 1px solid #2a2c3d;
+      padding: 14px 18px; border-radius: 12px; cursor: pointer;
+      transition: all 0.15s ease-in-out;
+    }
+    .wallet-option-row:hover {
+      background: #232635; border-color: var(--polygon-purple); transform: translateY(-1px);
+    }
+    .wallet-option-left { display: flex; align-items: center; gap: 14px; }
+    .wallet-option-icon { width: 32px; height: 32px; border-radius: 6px; }
+    .wallet-option-name { font-size: 15px; font-weight: 600; color: #fff; }
+    .wallet-detected-badge {
+      background: rgba(0, 170, 108, 0.15); color: #00ffaa;
+      font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+      border: 1px solid rgba(0, 170, 108, 0.3);
+    }
 
     /* POLYMARKET PARADIGM SPLIT PLATFORM */
     #player-view {
@@ -635,6 +675,49 @@
   </div>
 </div>
 
+<div class="custom-wallet-modal-overlay" id="walletModalOverlay">
+  <div class="custom-wallet-card-container">
+    <div class="custom-wallet-modal-header">
+      <span class="custom-wallet-modal-title">Select Wallet</span>
+      <button class="custom-wallet-close-x" onclick="closeWalletPopup()">✕</button>
+    </div>
+    
+    <div class="custom-wallet-options-stack">
+      <div class="wallet-option-row" onclick="executeNativeWalletConnection('metamask')">
+        <div class="wallet-option-left">
+          <img class="wallet-option-icon" src="https://assets.coingecko.com/coins/images/279/small/ethereum.png" alt="" style="background:#f6851b; padding:4px;" />
+          <span class="custom-wallet-modal-title" style="font-size:15px;">MetaMask</span>
+        </div>
+        <span class="wallet-detected-badge">DETECTED</span>
+      </div>
+
+      <div class="wallet-option-row" onclick="executeNativeWalletConnection('coinbase')">
+        <div class="wallet-option-left">
+          <img class="wallet-option-icon" src="https://assets.coingecko.com/coins/images/279/small/ethereum.png" alt="" style="background:#0052ff; padding:4px;" />
+          <span class="custom-wallet-modal-title" style="font-size:15px;">Coinbase Wallet</span>
+        </div>
+        <span class="wallet-detected-badge" style="background:rgba(255,255,255,0.05); color:#aaa; border-color:transparent;">AVAILABLE</span>
+      </div>
+
+      <div class="wallet-option-row" onclick="executeNativeWalletConnection('phantom')">
+        <div class="wallet-option-left">
+          <img class="wallet-option-icon" src="https://assets.coingecko.com/coins/images/279/small/ethereum.png" alt="" style="background:#ab9ff2; padding:4px;" />
+          <span class="custom-wallet-modal-title" style="font-size:15px;">Phantom</span>
+        </div>
+        <span class="wallet-detected-badge" style="background:rgba(255,255,255,0.05); color:#aaa; border-color:transparent;">AVAILABLE</span>
+      </div>
+
+      <div class="wallet-option-row" onclick="executeNativeWalletConnection('trust')">
+        <div class="wallet-option-left">
+          <img class="wallet-option-icon" src="https://assets.coingecko.com/coins/images/279/small/ethereum.png" alt="" style="background:#0500ff; padding:4px;" />
+          <span class="custom-wallet-modal-title" style="font-size:15px;">Trust Wallet</span>
+        </div>
+        <span class="wallet-detected-badge" style="background:rgba(255,255,255,0.05); color:#aaa; border-color:transparent;">AVAILABLE</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -674,58 +757,80 @@
   let activeMarketSelection = null;
   let clockIntervalTimer = null;
   
-  // Universal Popup Instances
-  let universalModalEngine = null;
   let activeEthersProviderInstance = null;
 
   function save() { localStorage.setItem('mykick_streamers', JSON.stringify(streamers)); }
 
-  // Instantiate standard Discovery popup modal properties
-  function initMultiWalletPopup() {
-    if (typeof WalletConnectModal === 'undefined') return;
-    
-    universalModalEngine = new WalletConnectModal.WalletConnectModal({
-      projectId: '951a8bf90731a556e9c9f6a6ef4ed87c', // Public infrastructure token key
-      chains: [137], // Forces Polygon Mainnet focus tracking
-      themeMode: 'dark'
-    });
+  /* UNIVERSAL MODAL TOGGLE PIPELINES */
+  function connectWallet() {
+    document.getElementById('walletModalOverlay').classList.add('open');
+  }
+  
+  function closeWalletPopup() {
+    document.getElementById('walletModalOverlay').classList.remove('open');
   }
 
   /* WEB3 CONNECTIONS */
-  async function connectWallet() {
-    // Force Multi-Wallet Modal Interface Pipeline directly
-    if (!universalModalEngine) {
-      initMultiWalletPopup();
+  async function executeNativeWalletConnection(walletType) {
+    if (!window.ethereum) {
+      toast("Please install a Web3 wallet extension to complete this trade connection.");
+      return;
     }
-
+    
     try {
-      if (universalModalEngine) {
-        await universalModalEngine.openModal();
-        
-        // Polling watcher to hook the active instance post-connection
-        const connectionSyncLoop = setInterval(async () => {
-          if (window.ethereum) {
-            activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
-            const verifiedAccounts = await activeEthersProviderInstance.send("eth_accounts", []);
-            
-            if (verifiedAccounts.length > 0) {
-              clearInterval(connectionSyncLoop);
-              userWalletAddress = verifiedAccounts[0];
-              universalModalEngine.closeModal();
-              updateWalletUI();
-              toast("Wallet Paired Successfully! 🎉");
-            }
+      closeWalletPopup();
+      toast("Connecting to provider interface...");
+      
+      // Request ledger accounts from injection channel variables
+      const rawAccounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      userWalletAddress = rawAccounts[0];
+      activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
+      
+      const walletNetwork = await activeEthersProviderInstance.getNetwork();
+      if (walletNetwork.chainId !== 137n) {
+        try {
+          toast("Switching active network target parameters to Polygon Mainnet...");
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: POLYGON_CHAIN_ID }],
+          });
+        } catch (switchError) {
+          if (switchError.code === 4902) {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: POLYGON_CHAIN_ID,
+                chainName: 'Polygon Mainnet',
+                nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
+                rpcUrls: ['https://polygon-rpc.com/'],
+                blockExplorerUrls: ['https://polygonscan.com/']
+              }],
+            });
+          } else {
+            throw switchError;
           }
-        }, 1000);
-        
-        // Safeguard to drop watcher tracking after 60 seconds of inactivity
-        setTimeout(() => clearInterval(connectionSyncLoop), 60000);
-      } else {
-        toast("Universal connect component unavailable.");
+        }
+        activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
       }
-    } catch (modalErr) {
-      console.error(modalErr);
-      toast("Connection instance dropped.");
+      
+      updateWalletUI();
+      if (activeMarketSelection) {
+        selectBetSlip(
+          activeMarketSelection.bucketId, 
+          activeMarketSelection.numericIdx, 
+          activeMarketSelection.label, 
+          activeMarketSelection.outcome, 
+          activeMarketSelection.pricePerShare
+        );
+      }
+      toast("Wallet Connected Successfully! 🎉");
+    } catch (err) {
+      console.error(err);
+      if (err.code === 4001) {
+        toast("Connection request cancelled by user.");
+      } else {
+        toast("Connection failed. Check configuration settings.");
+      }
     }
   }
 
@@ -1135,7 +1240,6 @@
         }
       } catch(e) {}
     }, 4000);
-    iframe.onload = null;
     iframe.onerror = () => { clearTimeout(timer); showBlocked(username); };
 
     updatePlayerMeta(username);
@@ -1193,7 +1297,6 @@
   function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
 
   /* INIT */
-  initMultiWalletPopup();
   loadAll();
   setInterval(loadAll, 60000);
 </script>
