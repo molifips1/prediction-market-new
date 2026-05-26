@@ -162,6 +162,7 @@
     .card:hover .play-circle { opacity: 1; transform: scale(1); }
     .play-circle svg { width: 22px; height: 22px; margin-left: 3px; }
     .card-body { padding: 12px 14px 14px; }
+    .card-thumb image { width: 100%; height: 100%; object-fit: cover; display: block; }
     .card-top { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; }
     .card-avatar { width: 38px; height: 38px; border-radius: 50%; background: #252738; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--text-secondary); flex-shrink: 0; overflow: hidden; }
     .card-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -769,13 +770,34 @@
   const WORKER_URL = 'https://blue-unit-891d.apetersen280.workers.dev/'; 
   
   const POLYGON_CHAIN_ID = '0x89'; 
-  const CONTRACT_ADDRESS = '0x166f4ec760103168e28C38Ab4026B915bAC7429D';
+  const CONTRACT_ADDRESS = '0xdA65258b09832aA2C46F844a5cf1f0c81E2fb3964';
   const USDC_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
 
-  // Core ABIs for interaction loops
+  // Updated Core ABIs for P2P Escrow interaction maps
   const PREDICTION_MARKET_ABI = [
-    "function buyShares(bytes32 streamer, uint256 endTime, uint8 bracketId, bool outcome, uint256 usdcAmount) external",
-    "function claimWinnings(bytes32 streamer, uint256 endTime, uint8 bracketId) external"
+    {
+      "inputs": [
+        { "internalType": "bytes32", "name": "streamer", "type": "bytes32" },
+        { "internalType": "uint256", "name": "timestamp", "type": "uint256" },
+        { "internalType": "uint8", "name": "bracketId", "type": "uint8" }
+      ],
+      "name": "claim",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        { "internalType": "bytes32", "name": "streamer", "type": "bytes32" },
+        { "internalType": "uint256", "name": "timestamp", "type": "uint256" },
+        { "internalType": "uint8", "name": "bracketId", "type": "uint8" },
+        { "internalType": "uint256", "name": "amount", "type": "uint256" }
+      ],
+      "name": "placeBet",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
   ];
   const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
@@ -950,13 +972,13 @@
         <div class="portfolio-data-row">
           <span style="font-weight:600; color:#fff;">${position.streamer} Market</span>
           <span>${position.bracketLabel} - <b style="color:${position.outcome === 'YES' ? 'var(--yes-green)' : 'var(--no-red)'}">${position.outcome}</b></span>
-          <span>${position.shares} shares</span>
+          <span>$${position.shares} wagers</span>
           <span style="color:${isResolved ? 'var(--green-text)' : 'var(--text-secondary)'}; font-weight:500;">
             ${isResolved ? 'Resolved' : 'Active Trading'}
           </span>
           <div style="text-align: right;">
             <button class="claim-btn" ${!isResolved ? 'disabled' : ''} onclick="claimPositionWinnings(${idx})">
-              ${isResolved ? 'Claim Payout' : 'Locked'}
+              ${isResolved ? 'Claim/Refund' : 'Locked'}
             </button>
           </div>
         </div>
@@ -981,7 +1003,7 @@
       const usernameBytes32 = ethers.encodeBytes32String(position.streamer);
 
       toast("Submitting claim transaction on-chain...");
-      const tx = await marketInstance.claimWinnings(
+      const tx = await marketInstance.claim(
         usernameBytes32,
         position.endTime,
         position.bracketId
@@ -990,7 +1012,7 @@
       toast("Awaiting ledger block verification...");
       await tx.wait(1);
 
-      toast("Payout successfully claimed! 💰");
+      toast("Claim or refund executed successfully! 💰");
       activeBetPositionsArray.splice(index, 1);
       saveBets();
       renderPortfolioRows();
@@ -1028,15 +1050,7 @@
     }, 1000);
   }
 
-  /*
-
-
-
-
-
-
-
-   GET TARGET UNIX ENDTIME */
+  /* GET TARGET UNIX ENDTIME */
   function getMarketTargetEndTime() {
     const d = new Date();
     d.setHours(d.getHours() + 1, 0, 0, 0);
@@ -1067,12 +1081,12 @@
       return `
         <div class="bucket-row-item" id="card-${b.id}">
           <span class="bucket-row-title">${b.label}</span>
-          <span class="bucket-row-volume">Volume: $0.00</span>
+          <span class="bucket-row-volume">Volume: Variable</span>
           <button class="row-bet-btn yes" id="btn-yes-${b.id}" onclick="selectBetSlip('${b.id}', ${b.idx}, '${b.label}', 'YES', ${yesPrice})">
-            Yes ¢${yesPrice}
+            Match YES
           </button>
           <button class="row-bet-btn no" id="btn-no-${b.id}" onclick="selectBetSlip('${b.id}', ${b.idx}, '${b.label}', 'NO', ${noPrice})">
-            No ¢${noPrice}
+            Match NO
           </button>
         </div>
       `;
@@ -1114,8 +1128,8 @@
         </div>
         
         <div class="order-slip-tabs">
-          <button class="order-tab ${outcome === 'YES' ? 'yes-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', ${numericIdx}, '${label}', 'YES', 50)">Buy Yes</button>
-          <button class="order-tab ${outcome === 'NO' ? 'no-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', ${numericIdx}, '${label}', 'NO', 50)">Buy No</button>
+          <button class="order-tab ${outcome === 'YES' ? 'yes-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', ${numericIdx}, '${label}', 'YES', 50)">Wager Yes</button>
+          <button class="order-tab ${outcome === 'NO' ? 'no-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', ${numericIdx}, '${label}', 'NO', 50)">Wager No</button>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:6px;">
@@ -1135,12 +1149,12 @@
 
         <div style="display:flex; flex-direction:column; gap:8px; margin-top:4px; padding-top:12px; border-top:1px solid var(--border);">
           <div class="order-summary-row">
-            <span>Avg. Price</span>
-            <span class="order-summary-value">¢${pricePerShare}</span>
+            <span>Pool Model</span>
+            <span class="order-summary-value" style="color:var(--green-text);">P2P Shared Pot</span>
           </div>
           <div class="order-summary-row">
-            <span>Est. Shares Received</span>
-            <span class="order-summary-value" id="est-shares-val">20.00</span>
+            <span>Est. Return Ratio</span>
+            <span class="order-summary-value" id="est-shares-val">Dynamic Odds</span>
           </div>
         </div>
 
@@ -1164,11 +1178,8 @@
     if (!activeMarketSelection) return;
     const inputEl = document.getElementById('order-amount-input');
     const usdAmount = inputEl ? (parseFloat(inputEl.value) || 0) : 0;
-    const priceCents = activeMarketSelection.pricePerShare;
-    
-    const totalShares = usdAmount / (priceCents / 100);
     const displayVal = document.getElementById('est-shares-val');
-    if (displayVal) displayVal.textContent = totalShares.toFixed(2);
+    if (displayVal) displayVal.textContent = `$${usdAmount.toFixed(2)}`;
   }
 
   /* LIVE BLOCKCHAIN ROUTING PIPELINE */
@@ -1197,10 +1208,8 @@
       // Parse out parameters needed for contract execution structures
       const usernameBytes32 = ethers.encodeBytes32String(currentPlayer);
       
-      // Time buffer applied directly to match synchronization bounds across network blocks
-      const targetUnixEpoch = getMarketTargetEndTime() + 3600; 
+      const targetUnixEpoch = getMarketTargetEndTime(); 
       const targetBracketId = activeMarketSelection.numericIdx;
-      const parsedOutcomeValue = (activeMarketSelection.outcome === 'YES');
 
       // Setup dynamic standard interface objects
       const tokenInstance = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
@@ -1218,11 +1227,10 @@
       }
 
       toast("Submitting trade directly to contract...");
-      const purchaseTx = await marketInstance.buyShares(
+      const purchaseTx = await marketInstance.placeBet(
         usernameBytes32,
         targetUnixEpoch,
         targetBracketId,
-        parsedOutcomeValue,
         rawUsdcValue
       );
 
@@ -1230,14 +1238,13 @@
       await purchaseTx.wait(1);
       
       // Push position item details to tracked arrays
-      const totalEstimatedShares = usdAmountInput / (activeMarketSelection.pricePerShare / 100);
       activeBetPositionsArray.push({
         streamer: currentPlayer,
         endTime: targetUnixEpoch,
         bracketId: targetBracketId,
         bracketLabel: activeMarketSelection.label,
         outcome: activeMarketSelection.outcome,
-        shares: totalEstimatedShares.toFixed(2)
+        shares: usdAmountInput.toFixed(2)
       });
       saveBets();
 
