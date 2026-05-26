@@ -149,7 +149,7 @@
     .card-footer { display: flex; align-items: center; justify-content: space-between; }
     .card-category { font-size: 12px; color: var(--text-muted); }
 
-    /* POLYMARKET NATIVE SELECTION DISCOVERY POPUP COMPONENT */
+    /* POLYMARKET SELECTION MODAL SYSTEM */
     .custom-wallet-modal-overlay {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
       display: none; align-items: center; justify-content: center;
@@ -724,9 +724,7 @@
   const WORKER_URL = 'https://blue-unit-891d.apetersen280.workers.dev/'; 
   
   const POLYGON_CHAIN_ID = '0x89'; 
-  const CONTRACT_ADDRESS = '0xbcfe549Aa42F94BDaa145977Bf1cE64A64e47183';
-  
-  // Reverted completely to match standard Native USDC architecture requirements
+  const CONTRACT_ADDRESS = '0xB4815458f9Ca870a0bbe9d15c2AA33F814fEE7fA';
   const USDC_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
 
   // Core ABIs for interaction loops
@@ -759,6 +757,7 @@
   let clockIntervalTimer = null;
   
   let activeEthersProviderInstance = null;
+  let selectedActiveWalletProvider = null;
 
   function save() { localStorage.setItem('mykick_streamers', JSON.stringify(streamers)); }
 
@@ -779,29 +778,32 @@
     }
     
     try {
-      if (window.ethereum.isMetaMask) {
-        // Enforce synchronization across provider interfaces
-        window.ethereum = window.ethereum; 
-      }
-      
       closeWalletPopup();
       toast("Connecting to provider interface...");
       
-      const rawAccounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      // Isolate MetaMask specifically from multi-extension arrays
+      let targetedExtension = window.ethereum;
+      if (window.ethereum.providers && window.ethereum.providers.length > 0) {
+        targetedExtension = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum.providers[0];
+      }
+      
+      selectedActiveWalletProvider = targetedExtension;
+      
+      const rawAccounts = await selectedActiveWalletProvider.request({ method: 'eth_requestAccounts' });
       userWalletAddress = rawAccounts[0];
-      activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
+      activeEthersProviderInstance = new ethers.BrowserProvider(selectedActiveWalletProvider);
       
       const walletNetwork = await activeEthersProviderInstance.getNetwork();
       if (walletNetwork.chainId !== 137n) {
         try {
           toast("Switching active network target parameters to Polygon Mainnet...");
-          await window.ethereum.request({
+          await selectedActiveWalletProvider.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: POLYGON_CHAIN_ID }],
           });
         } catch (switchError) {
           if (switchError.code === 4902) {
-            await window.ethereum.request({
+            await selectedActiveWalletProvider.request({
               method: 'wallet_addEthereumChain',
               params: [{
                 chainId: POLYGON_CHAIN_ID,
@@ -815,7 +817,7 @@
             throw switchError;
           }
         }
-        activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
+        activeEthersProviderInstance = new ethers.BrowserProvider(selectedActiveWalletProvider);
       }
       
       updateWalletUI();
@@ -849,7 +851,11 @@
   }
 
   if (window.ethereum) {
-    window.ethereum.on('accountsChanged', (accounts) => {
+    const targetedListener = (window.ethereum.providers && window.ethereum.providers.length > 0) 
+      ? (window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum.providers[0]) 
+      : window.ethereum;
+
+    targetedListener.on('accountsChanged', (accounts) => {
       userWalletAddress = accounts.length > 0 ? accounts[0] : null;
       updateWalletUI();
       if (activeMarketSelection) {
@@ -862,7 +868,7 @@
         );
       }
     });
-    window.ethereum.on('chainChanged', () => window.location.reload());
+    targetedListener.on('chainChanged', () => window.location.reload());
   }
 
   /* TRACK AND COMPUTE CLOCK INTERVAL TIMELINES OVER DESIGNATED TARGETS */
@@ -893,7 +899,7 @@
     }, 1000);
   }
 
-  /* GET TARGET UNIX ENDTIME WITH TIMEZONE OFFSET ACCURACY DEFENSES */
+  /* GET TARGET UNIX ENDTIME */
   function getMarketTargetEndTime() {
     const d = new Date();
     d.setHours(d.getHours() + 1, 0, 0, 0);
@@ -1043,7 +1049,9 @@
 
     try {
       toast("Initializing transaction routing...");
-      const finalEthersProvider = activeEthersProviderInstance || new ethers.BrowserProvider(window.ethereum);
+      
+      const providerSource = selectedActiveWalletProvider || window.ethereum;
+      const finalEthersProvider = new ethers.BrowserProvider(providerSource);
       const signer = await finalEthersProvider.getSigner();
 
       // Convert input values into base uint256 formats (USDC uses 6 decimal places on Polygon)
