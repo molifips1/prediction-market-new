@@ -787,7 +787,7 @@
   ];
 
   // Read-only provider — no wallet needed for reads
-  const POLYGON_RPC = 'https://polygon-rpc.com/';
+  const POLYGON_RPC = 'https://polygon.llamarpc.com';
   function getReadProvider() { return new ethers.JsonRpcProvider(POLYGON_RPC); }
   function getReadContract() { return new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, getReadProvider()); }
 
