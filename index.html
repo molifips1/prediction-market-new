@@ -787,7 +787,7 @@
   ];
 
   // Read-only provider — no wallet needed for reads
-  const POLYGON_RPC = 'https://polygon.llamarpc.com';
+  const POLYGON_RPC = 'https://rpc.ankr.com/polygon';
   function getReadProvider() { return new ethers.JsonRpcProvider(POLYGON_RPC); }
   function getReadContract() { return new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, getReadProvider()); }
 
@@ -957,9 +957,10 @@
       const contract = getReadContract();
       const endTime  = getMarketTargetEndTime();
 
-      // Query BetPlaced events for this wallet across all streamers
-      const filter = contract.filters.BetPlaced(null, null, userWalletAddress);
-      const events  = await contract.queryFilter(filter, -100000);
+      // Query all BetPlaced events then filter client-side (user is not indexed)
+      const filter = contract.filters.BetPlaced();
+      const events  = (await contract.queryFilter(filter, -100000))
+        .filter(function(ev) { return ev.args.user.toLowerCase() === userWalletAddress.toLowerCase(); });
 
       if (events.length === 0) {
         container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>No bets placed yet.</p></div>';
