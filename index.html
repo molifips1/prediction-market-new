@@ -975,10 +975,23 @@
       const contract = await getReadContract();
       const endTime  = getMarketTargetEndTime();
 
-      // Query all BetPlaced events then filter client-side (user is not indexed)
+      // Query BetPlaced events in chunks of 9000 blocks (RPC limit is 10000)
       const filter = contract.filters.BetPlaced();
-      const events  = (await contract.queryFilter(filter, -100000))
-        .filter(function(ev) { return ev.args.user.toLowerCase() === userWalletAddress.toLowerCase(); });
+      const latestBlock = await (await getWorkingProvider()).getBlockNumber();
+      const CHUNK = 9000;
+      const LOOK_BACK = 90000; // ~5 days on Polygon
+      const fromBlock = Math.max(0, latestBlock - LOOK_BACK);
+      let allEvents = [];
+      for (let from = fromBlock; from <= latestBlock; from += CHUNK) {
+        const to = Math.min(from + CHUNK - 1, latestBlock);
+        try {
+          const chunk = await contract.queryFilter(filter, from, to);
+          allEvents = allEvents.concat(chunk);
+        } catch(e) { console.warn('chunk failed', from, to, e); }
+      }
+      const events = allEvents.filter(function(ev) {
+        return ev.args.user.toLowerCase() === userWalletAddress.toLowerCase();
+      });
 
       if (events.length === 0) {
         container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>No bets placed yet.</p></div>';
