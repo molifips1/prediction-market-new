@@ -787,9 +787,27 @@
   ];
 
   // Read-only provider — no wallet needed for reads
-  const POLYGON_RPC = 'https://rpc.ankr.com/polygon';
-  function getReadProvider() { return new ethers.JsonRpcProvider(POLYGON_RPC); }
-  function getReadContract() { return new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, getReadProvider()); }
+  // Multiple fallback RPCs - tries each until one works
+  const POLYGON_RPCS = [
+    'https://polygon-bor-rpc.publicnode.com',
+    'https://polygon.meowrpc.com',
+    'https://polygon.drpc.org',
+  ];
+  async function getWorkingProvider() {
+    for (const rpc of POLYGON_RPCS) {
+      try {
+        const p = new ethers.JsonRpcProvider(rpc);
+        await p.getBlockNumber();
+        return p;
+      } catch(e) { continue; }
+    }
+    throw new Error('All RPC endpoints failed');
+  }
+  async function getReadContract() {
+    const provider = await getWorkingProvider();
+    return new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, provider);
+  }
+
 
   let streamers = JSON.parse(localStorage.getItem('mykick_streamers') || 'null') || [
     { username: 'haddzy',       display: 'Haddzy' },
@@ -954,7 +972,7 @@
     container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>Loading positions from chain...</p></div>';
 
     try {
-      const contract = getReadContract();
+      const contract = await getReadContract();
       const endTime  = getMarketTargetEndTime();
 
       // Query all BetPlaced events then filter client-side (user is not indexed)
@@ -1125,7 +1143,7 @@
     }).join('');
 
     try {
-      const contract = getReadContract();
+      const contract = await getReadContract();
       const streamerBytes32 = ethers.encodeBytes32String(username);
       const endTime = getMarketTargetEndTime();
 
