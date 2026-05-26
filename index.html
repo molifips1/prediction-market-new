@@ -162,7 +162,6 @@
     .card:hover .play-circle { opacity: 1; transform: scale(1); }
     .play-circle svg { width: 22px; height: 22px; margin-left: 3px; }
     .card-body { padding: 12px 14px 14px; }
-    .card-thumb image { width: 100%; height: 100%; object-fit: cover; display: block; }
     .card-top { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; }
     .card-avatar { width: 38px; height: 38px; border-radius: 50%; background: #252738; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--text-secondary); flex-shrink: 0; overflow: hidden; }
     .card-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -773,7 +772,7 @@
   const CONTRACT_ADDRESS = '0xdA65258b09832aA2C46F844a5cf1f0c81E2fb3964';
   const USDC_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
 
-  // Updated Core ABIs for P2P Escrow interaction maps
+  // Core ABIs mapped directly to the new shared-pot deployment
   const PREDICTION_MARKET_ABI = [
     {
       "inputs": [
@@ -960,7 +959,7 @@
     if (!container) return;
     
     if (activeBetPositionsArray.length === 0) {
-      container.innerHTML = `<div class="empty" style="grid-column: 1/-1; padding: 40px 20px;"><p>No bets placed yet.</p></div>`;
+      container.innerHTML = `<div class="empty" style="grid-column: 1/-1; padding: 40px 20px;"><p>No wagers placed yet.</p></div>`;
       return;
     }
 
@@ -1081,7 +1080,7 @@
       return `
         <div class="bucket-row-item" id="card-${b.id}">
           <span class="bucket-row-title">${b.label}</span>
-          <span class="bucket-row-volume">Volume: Variable</span>
+          <span class="bucket-row-volume">Pool: Shared Pot</span>
           <button class="row-bet-btn yes" id="btn-yes-${b.id}" onclick="selectBetSlip('${b.id}', ${b.idx}, '${b.label}', 'YES', ${yesPrice})">
             Match YES
           </button>
@@ -1182,7 +1181,7 @@
     if (displayVal) displayVal.textContent = `$${usdAmount.toFixed(2)}`;
   }
 
-  /* LIVE BLOCKCHAIN ROUTING PIPELINE */
+  /* FIXED LIVE BLOCKCHAIN ROUTING PIPELINE */
   async function submitFinalBet() {
     if (!userWalletAddress) {
       connectWallet();
@@ -1198,7 +1197,13 @@
     try {
       toast("Initializing transaction routing...");
       
+      // Fixed instance selection to ensure active provider fallback to global context window
       const providerSource = selectedActiveWalletProvider || window.ethereum;
+      if (!providerSource) {
+        toast("Web3 Provider missing. Connect wallet.");
+        return;
+      }
+      
       const finalEthersProvider = new ethers.BrowserProvider(providerSource);
       const signer = await finalEthersProvider.getSigner();
 
