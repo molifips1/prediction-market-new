@@ -674,38 +674,34 @@
   let activeMarketSelection = null;
   let clockIntervalTimer = null;
   
-  // WalletConnect Modal Configuration Object
-  let globalWalletModalInstance = null;
+  // Universal Popup Instances
+  let universalModalEngine = null;
   let activeEthersProviderInstance = null;
 
   function save() { localStorage.setItem('mykick_streamers', JSON.stringify(streamers)); }
 
-  // Initialize the wallet modal components upon load
-  function initUniversalWalletConnectionKit() {
-    if (typeof WalletConnectModal === 'undefined') {
-      console.error("WalletConnect package did not resolve over CDN mapping bounds.");
-      return;
-    }
+  // Instantiate standard Discovery popup modal properties
+  function initMultiWalletPopup() {
+    if (typeof WalletConnectModal === 'undefined') return;
     
-    // Configured using the default Open-Source Explorer parameters
-    globalWalletModalInstance = new WalletConnectModal.WalletConnectModal({
-      projectId: '951a8bf90731a556e9c9f6a6ef4ed87c', // Free connection optimization project hash token
-      chains: [137], // Root ID parameter for Polygon Mainnet configuration routing
+    universalModalEngine = new WalletConnectModal.WalletConnectModal({
+      projectId: '951a8bf90731a556e9c9f6a6ef4ed87c', // Public infrastructure token key
+      chains: [137], // Forces Polygon Mainnet focus tracking
       themeMode: 'dark'
     });
   }
 
   /* WEB3 CONNECTIONS */
   async function connectWallet() {
-    // Fallback path mapping if a browser-integrated provider (e.g. MetaMask extension) is active
-    if (window.ethereum && window.ethereum.isMetaMask) {
+    // 1. Direct browser extension shortcut check (MetaMask, Coinbase Wallet, etc.)
+    if (window.ethereum) {
       try {
         const rawAccounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         userWalletAddress = rawAccounts[0];
         activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
         
-        const currentNetworkDetails = await activeEthersProviderInstance.getNetwork();
-        if (currentNetworkDetails.chainId !== 137n) {
+        const walletNetwork = await activeEthersProviderInstance.getNetwork();
+        if (walletNetwork.chainId !== 137n) {
           try {
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
@@ -727,7 +723,6 @@
               throw switchError;
             }
           }
-          // Refresh provider context post-switch
           activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
         }
         
@@ -741,51 +736,46 @@
             activeMarketSelection.pricePerShare
           );
         }
-        toast("Wallet Linked Over Extension! 🎉");
+        toast("Wallet Connected! 🎉");
         return;
-      } catch (extensionConnectionError) {
-        console.error("Extension pairing path failed, falling back to discovery modal mapping:", extensionConnectionError);
+      } catch (err) {
+        console.log("Extension connection bypassed, initializing discovery card popup...", err);
       }
     }
 
-    // Modal Discovery pipeline fallback for cross-platform compatibility mapping
-    if (!globalWalletModalInstance) {
-      initUniversalWalletConnectionKit();
+    // 2. Fallback Multi-Wallet Modal Interface Pipeline
+    if (!universalModalEngine) {
+      initMultiWalletPopup();
     }
 
     try {
-      if (globalWalletModalInstance) {
-        toast("Opening multi-wallet connector...");
-        await globalWalletModalInstance.openModal();
+      if (universalModalEngine) {
+        await universalModalEngine.openModal();
         
-        // Polling loop targeting the provider object instantiation changes post-selection
-        const connectionIntervalWatcher = setInterval(async () => {
+        // Polling watcher to hook the active instance post-connection
+        const connectionSyncLoop = setInterval(async () => {
           if (window.ethereum) {
-            clearInterval(connectionIntervalWatcher);
-            globalWalletModalInstance.closeModal();
+            activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
+            const verifiedAccounts = await activeEthersProviderInstance.send("eth_accounts", []);
             
-            try {
-              activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
-              const foundAccounts = await activeEthersProviderInstance.send("eth_accounts", []);
-              if (foundAccounts.length > 0) {
-                userWalletAddress = foundAccounts[0];
-                updateWalletUI();
-                toast("Connected successfully! 🎉");
-              }
-            } catch (initErr) {
-              console.error(initErr);
+            if (verifiedAccounts.length > 0) {
+              clearInterval(connectionSyncLoop);
+              userWalletAddress = verifiedAccounts[0];
+              universalModalEngine.closeModal();
+              updateWalletUI();
+              toast("Wallet Paired Successfully! 🎉");
             }
           }
         }, 1000);
         
-        // Timeout safeguard to terminate the watcher loop if the modal is abandoned
-        setTimeout(() => clearInterval(connectionIntervalWatcher), 60000);
+        // Safeguard to drop watcher tracking after 60 seconds of inactivity
+        setTimeout(() => clearInterval(connectionSyncLoop), 60000);
       } else {
-        toast("Universal connect component unavailable. Use MetaMask extension.");
+        toast("Please install MetaMask or a web3 browser wallet expansion card.");
       }
-    } catch (err) {
-      console.error(err);
-      toast("Connection instance refused.");
+    } catch (modalErr) {
+      console.error(modalErr);
+      toast("Connection instance dropped.");
     }
   }
 
@@ -993,10 +983,8 @@
 
     try {
       toast("Initializing transaction routing...");
-      
-      // Resolve structural reference using the active provider instance state
-      const resolvedProvider = activeEthersProviderInstance || new ethers.BrowserProvider(window.ethereum);
-      const signer = await resolvedProvider.getSigner();
+      const finalEthersProvider = activeEthersProviderInstance || new ethers.BrowserProvider(window.ethereum);
+      const signer = await finalEthersProvider.getSigner();
 
       // Convert input values into base uint256 formats (USDC uses 6 decimal places on Polygon)
       const rawUsdcValue = ethers.parseUnits(usdAmountInput.toString(), 6);
@@ -1254,7 +1242,7 @@
   function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
 
   /* INIT */
-  initUniversalWalletConnectionKit();
+  initMultiWalletPopup();
   loadAll();
   setInterval(loadAll, 60000);
 </script>
