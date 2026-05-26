@@ -698,7 +698,7 @@
               <strong>Resolution Source:</strong> The sole resolution source for this market is the official channel metrics verified via the platform's automated architecture proxy routing at <code style="color: var(--green-text); background: var(--bg-base); padding: 2px 6px; border-radius: 4px; font-size: 11px;">blue-unit-891d.apetersen280.workers.dev</code>. Alternate tracking sites or personal stream screenshots are not recognized for market settlement.
             </p>
             <div style="margin-top: 6px; font-size: 11px; color: var(--text-muted); display: flex; gap: 16px;">
-              <span><strong>Oracle Address:</strong> <span style="color: var(--polygon-purple);">0xB4815458f9Ca870a0bbe9d15c2AA33F814fEE7fA</span></span>
+              <span><strong>Oracle Address:</strong> <span style="color: var(--polygon-purple);">0xdA65258b09832aA2C46F844a5cf1f0c81E2fb3964</span></span>
               <span><strong>Collateral asset:</strong> USDC (Polygon)</span>
             </div>
           </div>
@@ -999,13 +999,17 @@
       const signer = await finalProvider.getSigner();
 
       const marketInstance = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
-      const usernameBytes32 = ethers.encodeBytes32String(position.streamer);
+      
+      // Strict configuration data sanitation for the claim execution loops
+      const usernameBytes32 = ethers.encodeBytes32String(position.streamer.trim().toLowerCase());
+      const parsedTargetTimestamp = BigInt(position.endTime);
+      const parsedBracketId = parseInt(position.bracketId, 10);
 
       toast("Submitting claim transaction on-chain...");
       const tx = await marketInstance.claim(
         usernameBytes32,
-        position.endTime,
-        position.bracketId
+        parsedTargetTimestamp,
+        parsedBracketId
       );
 
       toast("Awaiting ledger block verification...");
@@ -1017,7 +1021,7 @@
       renderPortfolioRows();
     } catch (err) {
       console.error(err);
-      toast("Claim execution halted or already processed.");
+      toast("Claim execution failed or already completed.");
     }
   }
 
@@ -1188,16 +1192,25 @@
       return;
     }
     
+    if (!currentPlayer) {
+      toast("Error: No streamer session target active.");
+      return;
+    }
+    
     const usdAmountInput = parseFloat(document.getElementById('order-amount-input').value) || 0;
     if (usdAmountInput <= 0) {
       toast("Please enter a valid investment amount!");
       return;
     }
 
+    if (!activeMarketSelection || activeMarketSelection.numericIdx === undefined) {
+      toast("Please select a valid bracket layout option.");
+      return;
+    }
+
     try {
       toast("Initializing transaction routing...");
       
-      // Fixed instance selection to ensure active provider fallback to global context window
       const providerSource = selectedActiveWalletProvider || window.ethereum;
       if (!providerSource) {
         toast("Web3 Provider missing. Connect wallet.");
@@ -1208,13 +1221,12 @@
       const signer = await finalEthersProvider.getSigner();
 
       // Convert input values into base uint256 formats (USDC uses 6 decimal places on Polygon)
-      const rawUsdcValue = ethers.parseUnits(usdAmountInput.toString(), 6);
+      const rawUsdcValue = ethers.parseUnits(usdAmountInput.toFixed(6), 6);
       
-      // Parse out parameters needed for contract execution structures
-      const usernameBytes32 = ethers.encodeBytes32String(currentPlayer);
-      
-      const targetUnixEpoch = getMarketTargetEndTime(); 
-      const targetBracketId = activeMarketSelection.numericIdx;
+      // Explicit parameters formatting to resolve the internal ENS lookup loop crashes
+      const usernameBytes32 = ethers.encodeBytes32String(currentPlayer.trim().toLowerCase());
+      const targetUnixEpoch = BigInt(getMarketTargetEndTime()); 
+      const targetBracketId = parseInt(activeMarketSelection.numericIdx, 10);
 
       // Setup dynamic standard interface objects
       const tokenInstance = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
@@ -1245,7 +1257,7 @@
       // Push position item details to tracked arrays
       activeBetPositionsArray.push({
         streamer: currentPlayer,
-        endTime: targetUnixEpoch,
+        endTime: Number(targetUnixEpoch),
         bracketId: targetBracketId,
         bracketLabel: activeMarketSelection.label,
         outcome: activeMarketSelection.outcome,
@@ -1258,7 +1270,7 @@
       loadMarketLayout(currentPlayer);
 
     } catch (txError) {
-      console.error(txError);
+      console.error("Detailed Exception Trace:", txError);
       if (txError.code === "ACTION_REJECTED" || txError.code === 4001) {
         toast("Transaction cancelled by user.");
       } else {
