@@ -695,10 +695,10 @@
               <strong>Anti-Fraud Termination Clause:</strong> If the streamer ends the broadcast unexpectedly or goes completely offline prior to the final 15 minutes of the designated betting hour, this market will be declared <strong>Void</strong>. All placed bets will be automatically invalidated, and 100% of the collateral principal will be unlocked for direct wallet refund withdrawals. Streamers are blocked from force-closing markets they trade in.
             </p>
             <p>
-              <strong>Resolution Source:</strong> The sole resolution source for this market is the official channel metrics verified via the platform's automated architecture proxy routing.
+              <strong>Resolution Source:</strong> The sole resolution source for this market is the official channel metrics verified via the platform's automated architecture proxy routing at <code style="color: var(--green-text); background: var(--bg-base); padding: 2px 6px; border-radius: 4px; font-size: 11px;">blue-unit-891d.apetersen280.workers.dev</code>. Alternate tracking sites or personal stream screenshots are not recognized for market settlement.
             </p>
             <div style="margin-top: 6px; font-size: 11px; color: var(--text-muted); display: flex; gap: 16px;">
-              <span><strong>Oracle Address:</strong> <span style="color: var(--polygon-purple);">0xdA65258b09832aA2C46F844a5cf1f0c81E2fb3964</span></span>
+              <span><strong>Oracle Address:</strong> <span style="color: var(--polygon-purple);">0xB4815458f9Ca870a0bbe9d15c2AA33F814fEE7fA</span></span>
               <span><strong>Collateral asset:</strong> USDC (Polygon)</span>
             </div>
           </div>
@@ -734,6 +734,30 @@
         </div>
         <span class="wallet-detected-badge">DETECTED</span>
       </div>
+
+      <div class="wallet-option-row" onclick="executeNativeWalletConnection('coinbase')">
+        <div class="wallet-option-left">
+          <img class="wallet-option-icon" src="https://assets.coingecko.com/coins/images/279/small/ethereum.png" alt="" style="background:#0052ff; padding:4px;" />
+          <span class="custom-wallet-modal-title" style="font-size:15px;">Coinbase Wallet</span>
+        </div>
+        <span class="wallet-detected-badge" style="background:rgba(255,255,255,0.05); color:#aaa; border-color:transparent;">AVAILABLE</span>
+      </div>
+
+      <div class="wallet-option-row" onclick="executeNativeWalletConnection('phantom')">
+        <div class="wallet-option-left">
+          <img class="wallet-option-icon" src="https://assets.coingecko.com/coins/images/279/small/ethereum.png" alt="" style="background:#ab9ff2; padding:4px;" />
+          <span class="custom-wallet-modal-title" style="font-size:15px;">Phantom</span>
+        </div>
+        <span class="wallet-detected-badge" style="background:rgba(255,255,255,0.05); color:#aaa; border-color:transparent;">AVAILABLE</span>
+      </div>
+
+      <div class="wallet-option-row" onclick="executeNativeWalletConnection('trust')">
+        <div class="wallet-option-left">
+          <img class="wallet-option-icon" src="https://assets.coingecko.com/coins/images/279/small/ethereum.png" alt="" style="background:#0500ff; padding:4px;" />
+          <span class="custom-wallet-modal-title" style="font-size:15px;">Trust Wallet</span>
+        </div>
+        <span class="wallet-detected-badge" style="background:rgba(255,255,255,0.05); color:#aaa; border-color:transparent;">AVAILABLE</span>
+      </div>
     </div>
   </div>
 </div>
@@ -743,16 +767,33 @@
 <script>
   const KICK = 'https://kick.com/';
   const WORKER_URL = 'https://blue-unit-891d.apetersen280.workers.dev/'; 
+  
   const POLYGON_CHAIN_ID = '0x89'; 
+  const CONTRACT_ADDRESS = '0xcf84eC9fC4A81A29362d1AE1698f10fFDADF4046';
+  const USDC_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+
+  // Core ABIs for interaction loops
+  const PREDICTION_MARKET_ABI = [
+    "function placeBet(bytes32 streamer, uint256 timestamp, uint8 bracketId, uint256 amount) external",
+    "function claim(bytes32 streamer, uint256 timestamp, uint8 bracketId) external"
+  ];
+  const ERC20_ABI = [
+    "function approve(address spender, uint256 amount) external returns (bool)",
+    "function allowance(address owner, address spender) external view returns (uint256)"
+  ];
 
   let streamers = JSON.parse(localStorage.getItem('mykick_streamers') || 'null') || [
     { username: 'haddzy',       display: 'Haddzy' },
     { username: 'trainwreckstv', display: 'Trainwreckstv' },
     { username: 'sweetflips',       display: 'SweetFlips' },
     { username: 'classybeef',       display: 'ClassyBeef' },
-    { username: 'thedoctor',       display: 'TheDoctor' }
+    { username: 'thedoctor',       display: 'TheDoctor' },
+    { username: 'auslots',       display: 'auslots' },
+    { username: 'generalqw77',       display: 'generalqw77' },
+    { username: 'roshtein',       display: 'roshtein' },
+    { username: 'maherco',       display: 'maherco' },
+    { username: 'kyootbot',      display: 'Kyootbot' }
   ];
-  
   let data = {};
   let filter = 'live';
   let searchQ = '';
@@ -760,7 +801,10 @@
   let userWalletAddress = null;
   let activeMarketSelection = null;
   let clockIntervalTimer = null;
+  
+  // Tracking placed positions array
   let activeBetPositionsArray = JSON.parse(localStorage.getItem('mykick_bets') || '[]');
+  
   let activeEthersProviderInstance = null;
   let selectedActiveWalletProvider = null;
 
@@ -768,12 +812,21 @@
   function saveBets() { localStorage.setItem('mykick_bets', JSON.stringify(activeBetPositionsArray)); }
 
   /* UNIVERSAL MODAL TOGGLE PIPELINES */
-  function connectWallet() { document.getElementById('walletModalOverlay').classList.add('open'); }
-  function closeWalletPopup() { document.getElementById('walletModalOverlay').classList.remove('open'); }
+  function connectWallet() {
+    document.getElementById('walletModalOverlay').classList.add('open');
+  }
+  
+  function closeWalletPopup() {
+    document.getElementById('walletModalOverlay').classList.remove('open');
+  }
 
   /* WEB3 CONNECTIONS */
   async function executeNativeWalletConnection(walletType) {
-    if (!window.ethereum) return toast("Please install a Web3 wallet extension.");
+    if (!window.ethereum) {
+      toast("Please install a Web3 wallet extension to complete this trade connection.");
+      return;
+    }
+    
     try {
       closeWalletPopup();
       toast("Connecting to provider interface...");
@@ -784,6 +837,7 @@
       }
       
       selectedActiveWalletProvider = targetedExtension;
+      
       const rawAccounts = await selectedActiveWalletProvider.request({ method: 'eth_requestAccounts' });
       userWalletAddress = rawAccounts[0];
       activeEthersProviderInstance = new ethers.BrowserProvider(selectedActiveWalletProvider);
@@ -791,31 +845,81 @@
       const walletNetwork = await activeEthersProviderInstance.getNetwork();
       if (walletNetwork.chainId !== 137n) {
         try {
-          await selectedActiveWalletProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: POLYGON_CHAIN_ID }] });
-        } catch (e) { toast("Please manually switch network to Polygon."); return; }
+          toast("Switching active network target parameters to Polygon Mainnet...");
+          await selectedActiveWalletProvider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: POLYGON_CHAIN_ID }],
+          });
+        } catch (switchError) {
+          if (switchError.code === 4902) {
+            await selectedActiveWalletProvider.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: POLYGON_CHAIN_ID,
+                chainName: 'Polygon Mainnet',
+                nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
+                rpcUrls: ['https://polygon-rpc.com/'],
+                blockExplorerUrls: ['https://polygonscan.com/']
+              }],
+            });
+          } else {
+            throw switchError;
+          }
+        }
         activeEthersProviderInstance = new ethers.BrowserProvider(selectedActiveWalletProvider);
       }
       
       updateWalletUI();
       renderPortfolioRows();
-      if (activeMarketSelection) selectBetSlip(activeMarketSelection.bucketId, activeMarketSelection.numericIdx, activeMarketSelection.label, activeMarketSelection.outcome, activeMarketSelection.pricePerShare);
+      if (activeMarketSelection) {
+        selectBetSlip(
+          activeMarketSelection.bucketId, 
+          activeMarketSelection.numericIdx, 
+          activeMarketSelection.label, 
+          activeMarketSelection.outcome, 
+          activeMarketSelection.pricePerShare
+        );
+      }
       toast("Wallet Connected Successfully! 🎉");
-    } catch (err) { toast("Connection request cancelled."); }
+    } catch (err) {
+      console.error(err);
+      if (err.code === 4001) {
+        toast("Connection request cancelled by user.");
+      } else {
+        toast("Connection failed. Check configuration settings.");
+      }
+    }
   }
 
   function updateWalletUI() {
     const btnText = document.getElementById('wallet-btn-text');
-    if (userWalletAddress) btnText.textContent = `${userWalletAddress.slice(0, 6)}...${userWalletAddress.slice(-4)}`;
-    else btnText.textContent = "Connect Wallet";
+    if (userWalletAddress) {
+      btnText.textContent = `${userWalletAddress.slice(0, 6)}...${userWalletAddress.slice(-4)}`;
+    } else {
+      btnText.textContent = "Connect Wallet";
+    }
   }
 
   if (window.ethereum) {
-    window.ethereum.on('accountsChanged', (accounts) => {
+    const targetedListener = (window.ethereum.providers && window.ethereum.providers.length > 0) 
+      ? (window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum.providers[0]) 
+      : window.ethereum;
+
+    targetedListener.on('accountsChanged', (accounts) => {
       userWalletAddress = accounts.length > 0 ? accounts[0] : null;
       updateWalletUI();
       renderPortfolioRows();
+      if (activeMarketSelection) {
+        selectBetSlip(
+          activeMarketSelection.bucketId, 
+          activeMarketSelection.numericIdx, 
+          activeMarketSelection.label, 
+          activeMarketSelection.outcome, 
+          activeMarketSelection.pricePerShare
+        );
+      }
     });
-    window.ethereum.on('chainChanged', () => window.location.reload());
+    targetedListener.on('chainChanged', () => window.location.reload());
   }
 
   /* PORTFOLIO VIEW CONTROLLER */
@@ -832,39 +936,107 @@
   function renderPortfolioRows() {
     const container = document.getElementById('portfolio-rows-injector');
     if (!container) return;
+    
     if (activeBetPositionsArray.length === 0) {
-      container.innerHTML = `<div class="empty" style="grid-column: 1/-1; padding: 40px 20px;"><p>No wagers placed yet.</p></div>`; return;
+      container.innerHTML = `<div class="empty" style="grid-column: 1/-1; padding: 40px 20px;"><p>No bets placed yet.</p></div>`;
+      return;
     }
+
     container.innerHTML = activeBetPositionsArray.map((position, idx) => {
       const nowUnix = Math.floor(Date.now() / 1000);
       const isResolved = nowUnix > position.endTime;
+      
       return `
         <div class="portfolio-data-row">
           <span style="font-weight:600; color:#fff;">${position.streamer} Market</span>
           <span>${position.bracketLabel} - <b style="color:${position.outcome === 'YES' ? 'var(--yes-green)' : 'var(--no-red)'}">${position.outcome}</b></span>
-          <span>$${position.shares} wagers</span>
-          <span style="color:${isResolved ? 'var(--green-text)' : 'var(--text-secondary)'}; font-weight:500;">${isResolved ? 'Resolved' : 'Active Trading'}</span>
-          <div style="text-align: right;"><button class="claim-btn" ${!isResolved ? 'disabled' : ''} onclick="claimPositionWinnings(${idx})">${isResolved ? 'Claim/Refund' : 'Locked'}</button></div>
-        </div>`;
+          <span>${position.shares} shares</span>
+          <span style="color:${isResolved ? 'var(--green-text)' : 'var(--text-secondary)'}; font-weight:500;">
+            ${isResolved ? 'Resolved' : 'Active Trading'}
+          </span>
+          <div style="text-align: right;">
+            <button class="claim-btn" ${!isResolved ? 'disabled' : ''} onclick="claimPositionWinnings(${idx})">
+              ${isResolved ? 'Claim Payout' : 'Locked'}
+            </button>
+          </div>
+        </div>
+      `;
     }).join('');
+  }
+
+  /* CLAIM PAYOUT PIPELINE */
+  async function claimPositionWinnings(index) {
+    if (!userWalletAddress) {
+      connectWallet();
+      return;
+    }
+
+    const position = activeBetPositionsArray[index];
+    try {
+      toast("Connecting to execution pipeline...");
+      const finalProvider = activeEthersProviderInstance || new ethers.BrowserProvider(window.ethereum);
+      const signer = await finalProvider.getSigner();
+
+      const marketInstance = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
+      const usernameBytes32 = ethers.encodeBytes32String(position.streamer);
+
+      toast("Submitting claim transaction on-chain...");
+      const tx = await marketInstance.claim(
+        usernameBytes32,
+        position.endTime,
+        position.bracketId
+      );
+
+      toast("Awaiting ledger block verification...");
+      await tx.wait(1);
+
+      toast("Payout successfully claimed! 💰");
+      activeBetPositionsArray.splice(index, 1);
+      saveBets();
+      renderPortfolioRows();
+    } catch (err) {
+      console.error(err);
+      toast("Claim execution halted or already processed.");
+    }
   }
 
   /* TRACK AND COMPUTE CLOCK INTERVAL TIMELINES OVER DESIGNATED TARGETS */
   function startTimelineClocks() {
     if (clockIntervalTimer) clearInterval(clockIntervalTimer);
+    
     clockIntervalTimer = setInterval(() => {
       if (!currentPlayer) return;
+
       const now = new Date();
       const targetMin = 59 - now.getMinutes();
       const targetSec = 59 - now.getSeconds();
+
       const clockEl = document.getElementById('timeline-clock-countdown');
       const resolutionEl = document.getElementById('timeline-resolution-schedule');
-      if (clockEl) clockEl.textContent = `${String(targetMin).padStart(2, '0')}m ${String(targetSec).padStart(2, '0')}s left to trade`;
-      if (resolutionEl) resolutionEl.textContent = `Resolving at top of next hour`;
+
+      if (clockEl) {
+        clockEl.textContent = `${String(targetMin).padStart(2, '0')}m ${String(targetSec).padStart(2, '0')}s left to trade`;
+      }
+
+      if (resolutionEl) {
+        const targetResolutionHour = (now.getHours() + 1) % 24;
+        const displayHour = targetResolutionHour % 12 || 12;
+        
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        resolutionEl.textContent = `Resolving: ${monthNames[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()} at ${displayHour}:00 PM ET (Peak count during final minute)`;
+      }
     }, 1000);
   }
 
-  /* GET TARGET UNIX ENDTIME */
+  /*
+
+
+
+
+
+
+
+   GET TARGET UNIX ENDTIME */
   function getMarketTargetEndTime() {
     const d = new Date();
     d.setHours(d.getHours() + 1, 0, 0, 0);
@@ -875,10 +1047,12 @@
   function loadMarketLayout(username) {
     const container = document.getElementById('market-buckets-list');
     const streamInfo = data[username];
+    
     activeMarketSelection = null;
     resetOrderSlipDefault();
 
     const baseCount = streamInfo?.viewers || 1500;
+    
     const brackets = [
       { id: 'b1', idx: 0, label: `Under ${fv(Math.round(baseCount * 0.7))}` },
       { id: 'b2', idx: 1, label: `${fv(Math.round(baseCount * 0.7))} – ${fv(Math.round(baseCount * 1.1))}` },
@@ -887,13 +1061,21 @@
     ];
 
     container.innerHTML = brackets.map((b) => {
+      const yesPrice = 50; 
+      const noPrice = 50;
+
       return `
         <div class="bucket-row-item" id="card-${b.id}">
           <span class="bucket-row-title">${b.label}</span>
-          <span class="bucket-row-volume">Pool: Shared Pot</span>
-          <button class="row-bet-btn yes" id="btn-yes-${b.id}" onclick="selectBetSlip('${b.id}', ${b.idx}, '${b.label}', 'YES', 50)">Match YES</button>
-          <button class="row-bet-btn no" id="btn-no-${b.id}" onclick="selectBetSlip('${b.id}', ${b.idx}, '${b.label}', 'NO', 50)">Match NO</button>
-        </div>`;
+          <span class="bucket-row-volume">Volume: $0.00</span>
+          <button class="row-bet-btn yes" id="btn-yes-${b.id}" onclick="selectBetSlip('${b.id}', ${b.idx}, '${b.label}', 'YES', ${yesPrice})">
+            Yes ¢${yesPrice}
+          </button>
+          <button class="row-bet-btn no" id="btn-no-${b.id}" onclick="selectBetSlip('${b.id}', ${b.idx}, '${b.label}', 'NO', ${noPrice})">
+            No ¢${noPrice}
+          </button>
+        </div>
+      `;
     }).join('');
   }
 
@@ -902,8 +1084,11 @@
     slipContainer.innerHTML = `
       <div class="order-slip-card">
         <span class="order-market-title-heading">Viewer Bracket Order Slip</span>
-        <div class="order-empty-state">Select a bracket YES or NO option below the stream to prepare your trade.</div>
-      </div>`;
+        <div class="order-empty-state">
+          Select a bracket YES or NO option below the stream to prepare your trade.
+        </div>
+      </div>
+    `;
   }
 
   /* INJECT SELECTION INTO RIGHT-SIDE POLYMARKET MODAL */
@@ -914,7 +1099,11 @@
     document.querySelectorAll('.row-bet-btn').forEach(el => el.classList.remove('active'));
 
     document.getElementById(`card-${bucketId}`).classList.add('selected');
-    document.getElementById(outcome === 'YES' ? `btn-yes-${bucketId}` : `btn-no-${bucketId}`).classList.add('active');
+    if (outcome === 'YES') {
+      document.getElementById(`btn-yes-${bucketId}`).classList.add('active');
+    } else {
+      document.getElementById(`btn-no-${bucketId}`).classList.add('active');
+    }
 
     const slipContainer = document.getElementById('order-slip-container');
     slipContainer.innerHTML = `
@@ -923,10 +1112,12 @@
           <span class="order-slip-sub-label">Market Option</span>
           <span class="order-market-title-heading">${label}</span>
         </div>
+        
         <div class="order-slip-tabs">
-          <button class="order-tab ${outcome === 'YES' ? 'yes-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', ${numericIdx}, '${label}', 'YES', 50)">Wager Yes</button>
-          <button class="order-tab ${outcome === 'NO' ? 'no-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', ${numericIdx}, '${label}', 'NO', 50)">Wager No</button>
+          <button class="order-tab ${outcome === 'YES' ? 'yes-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', ${numericIdx}, '${label}', 'YES', 50)">Buy Yes</button>
+          <button class="order-tab ${outcome === 'NO' ? 'no-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', ${numericIdx}, '${label}', 'NO', 50)">Buy No</button>
         </div>
+
         <div style="display:flex; flex-direction:column; gap:6px;">
           <span class="order-slip-sub-label">Amount</span>
           <div class="order-input-container">
@@ -934,52 +1125,64 @@
             <span class="order-currency-label">USDC</span>
           </div>
         </div>
+
         <div class="order-quick-amounts">
           <button class="quick-amt-btn" onclick="addOrderAmount(1)">+$1</button>
           <button class="quick-amt-btn" onclick="addOrderAmount(5)">+$5</button>
           <button class="quick-amt-btn" onclick="addOrderAmount(10)">+$10</button>
           <button class="quick-amt-btn" onclick="addOrderAmount(100)">+$100</button>
         </div>
+
         <div style="display:flex; flex-direction:column; gap:8px; margin-top:4px; padding-top:12px; border-top:1px solid var(--border);">
           <div class="order-summary-row">
-            <span>Pool Model</span>
-            <span class="order-summary-value" style="color:var(--green-text);">P2P Shared Pot</span>
+            <span>Avg. Price</span>
+            <span class="order-summary-value">¢${pricePerShare}</span>
+          </div>
+          <div class="order-summary-row">
+            <span>Est. Shares Received</span>
+            <span class="order-summary-value" id="est-shares-val">20.00</span>
           </div>
         </div>
+
         <button class="trade-submit-btn" onclick="submitFinalBet()">
           ${userWalletAddress ? 'Submit Trade' : 'Connect Wallet to Trade'}
         </button>
-      </div>`;
+      </div>
+    `;
+    calculateShares();
   }
 
   function addOrderAmount(val) {
     const input = document.getElementById('order-amount-input');
     if (!input) return;
-    input.value = (parseFloat(input.value) || 0) + val;
+    const current = parseFloat(input.value) || 0;
+    input.value = current + val;
+    calculateShares();
   }
-  function calculateShares() {}
 
+  function calculateShares() {
+    if (!activeMarketSelection) return;
+    const inputEl = document.getElementById('order-amount-input');
+    const usdAmount = inputEl ? (parseFloat(inputEl.value) || 0) : 0;
+    const priceCents = activeMarketSelection.pricePerShare;
+    
+    const totalShares = usdAmount / (priceCents / 100);
+    const displayVal = document.getElementById('est-shares-val');
+    if (displayVal) displayVal.textContent = totalShares.toFixed(2);
+  }
 
-  /* =======================================================================================================
-   * THE FIX: STRICT DATA FORMATTING (PREVENTS ETHERS.JS ENS RESOLVER LOOP CRASHES)
-   * ======================================================================================================= */
-  
-  const SAFE_MARKET_ABI = [
-    "function placeBet(bytes32 streamer, uint256 timestamp, uint8 bracketId, uint256 amount) external",
-    "function claim(bytes32 streamer, uint256 timestamp, uint8 bracketId) external"
-  ];
-  const SAFE_ERC20_ABI = [
-    "function approve(address spender, uint256 amount) external returns (bool)",
-    "function allowance(address owner, address spender) external view returns (uint256)"
-  ];
-
+  /* LIVE BLOCKCHAIN ROUTING PIPELINE */
   async function submitFinalBet() {
-    if (!userWalletAddress) return connectWallet();
-    if (!currentPlayer) return toast("Error: No active streamer selected.");
-
+    if (!userWalletAddress) {
+      connectWallet();
+      return;
+    }
+    
     const usdAmountInput = parseFloat(document.getElementById('order-amount-input').value) || 0;
-    if (usdAmountInput <= 0) return toast("Please enter a valid investment amount!");
-    if (!activeMarketSelection || activeMarketSelection.numericIdx === undefined) return toast("Please select an option first!");
+    if (usdAmountInput <= 0) {
+      toast("Please enter a valid investment amount!");
+      return;
+    }
 
     try {
       toast("Initializing transaction routing...");
@@ -988,26 +1191,27 @@
       const finalEthersProvider = new ethers.BrowserProvider(providerSource);
       const signer = await finalEthersProvider.getSigner();
 
-      // 1. STRICT ADDRESS SANITATION (Completely neutralizes ENS lookup bugs)
-      const safeUserAddress = ethers.getAddress(userWalletAddress);
-      const safeContractAddress = ethers.getAddress("0xdA65258b09832aA2C46F844a5cf1f0c81E2fb3964");
-      const safeUsdcAddress = ethers.getAddress("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359");
+      // Convert input values into base uint256 formats (USDC uses 6 decimal places on Polygon)
+      const rawUsdcValue = ethers.parseUnits(usdAmountInput.toString(), 6);
+      
+      // Parse out parameters needed for contract execution structures
+      const usernameBytes32 = ethers.encodeBytes32String(currentPlayer);
+      
+      // Market end time: top of the next hour
+      const targetUnixEpoch = getMarketTargetEndTime();
+      const targetBracketId = activeMarketSelection.numericIdx;
+      // Setup dynamic standard interface objects
+      const tokenInstance = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
+      const marketInstance = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
 
-      // 2. STRICT PARAMETER FORMATTING
-      const rawUsdcValue = ethers.parseUnits(usdAmountInput.toFixed(6), 6);
-      const usernameBytes32 = ethers.encodeBytes32String(currentPlayer.trim().toLowerCase());
-      const targetUnixEpoch = BigInt(getMarketTargetEndTime()); 
-      const targetBracketId = parseInt(activeMarketSelection.numericIdx, 10);
-
-      const tokenInstance = new ethers.Contract(safeUsdcAddress, SAFE_ERC20_ABI, signer);
-      const marketInstance = new ethers.Contract(safeContractAddress, SAFE_MARKET_ABI, signer);
-
+      // Evaluate allowance thresholds before dispatching transfers
       toast("Checking token trade allowance bounds...");
-      const explicitAllowance = await tokenInstance.allowance(safeUserAddress, safeContractAddress);
+      const explicitAllowance = await tokenInstance.allowance(userWalletAddress, CONTRACT_ADDRESS);
       
       if (explicitAllowance < rawUsdcValue) {
         toast("Approving USDC transfer parameters...");
-        const approvalTx = await tokenInstance.approve(safeContractAddress, ethers.MaxUint256);
+        const approvalTx = await tokenInstance.approve(CONTRACT_ADDRESS, ethers.MaxUint256);
+        toast("Waiting for block confirmation...");
         await approvalTx.wait(1);
       }
 
@@ -1019,15 +1223,18 @@
         rawUsdcValue
       );
 
+      toast("Processing transaction verification...");
       await purchaseTx.wait(1);
       
+      // Push position item details to tracked arrays
+      const totalEstimatedShares = usdAmountInput / (activeMarketSelection.pricePerShare / 100);
       activeBetPositionsArray.push({
         streamer: currentPlayer,
-        endTime: Number(targetUnixEpoch),
+        endTime: targetUnixEpoch,
         bracketId: targetBracketId,
         bracketLabel: activeMarketSelection.label,
         outcome: activeMarketSelection.outcome,
-        shares: usdAmountInput.toFixed(2)
+        shares: totalEstimatedShares.toFixed(2)
       });
       saveBets();
 
@@ -1036,54 +1243,24 @@
       loadMarketLayout(currentPlayer);
 
     } catch (txError) {
-      console.error("Detailed Tx Failure Log:", txError);
-      if (txError.code === "ACTION_REJECTED" || txError.code === 4001) toast("Transaction cancelled by user.");
-      else toast("Execution failed. Verify token balances.");
+      console.error(txError);
+      if (txError.code === "ACTION_REJECTED" || txError.code === 4001) {
+        toast("Transaction cancelled by user.");
+      } else {
+        toast("Execution failed. Verify token balances.");
+      }
     }
   }
 
-  async function claimPositionWinnings(index) {
-    if (!userWalletAddress) return connectWallet();
-    const position = activeBetPositionsArray[index];
-
-    try {
-      toast("Connecting to execution pipeline...");
-      const finalProvider = new ethers.BrowserProvider(selectedActiveWalletProvider || window.ethereum);
-      const signer = await finalProvider.getSigner();
-
-      // STRICT ADDRESS SANITATION
-      const safeContractAddress = ethers.getAddress("0xdA65258b09832aA2C46F844a5cf1f0c81E2fb3964");
-      const marketInstance = new ethers.Contract(safeContractAddress, SAFE_MARKET_ABI, signer);
-      
-      // STRICT PARAMETER FORMATTING
-      const usernameBytes32 = ethers.encodeBytes32String(position.streamer.trim().toLowerCase());
-      const parsedTargetTimestamp = BigInt(position.endTime);
-      const parsedBracketId = parseInt(position.bracketId, 10);
-
-      toast("Submitting claim transaction on-chain...");
-      const tx = await marketInstance.claim(
-        usernameBytes32,
-        parsedTargetTimestamp,
-        parsedBracketId
-      );
-
-      await tx.wait(1);
-
-      toast("Claim executed successfully! 💰");
-      activeBetPositionsArray.splice(index, 1);
-      saveBets();
-      renderPortfolioRows();
-    } catch (err) {
-      console.error(err);
-      toast("Claim execution halted or already processed.");
-    }
-  }
-
-  /* FETCH AND RENDER UI */
+  /* FETCH */
   async function fetchOne(username) {
     try {
       const r = await fetch(`${WORKER_URL}?user=${encodeURIComponent(username)}`);
+      if (!r.ok) throw new Error('Proxy error');
+      
       const d = await r.json();
+      if (!d || d.message) return null;
+      
       return {
         isLive: !!d.livestream,
         title: d.livestream?.session_title || '',
@@ -1093,7 +1270,10 @@
         avatar: d.user?.profile_pic || null,
         displayName: d.user?.username || username,
       };
-    } catch (e) { return null; }
+    } catch (e) {
+      console.error(`Failed to fetch ${username}:`, e);
+      return null;
+    }
   }
 
   async function loadAll() {
@@ -1108,8 +1288,11 @@
     }));
   }
 
+  /* FORMAT */
   function fv(n) { return n >= 1000 ? (n/1000).toFixed(1).replace('.0','') + 'K' : String(n); }
   function initials(name) { return name.slice(0,2).toUpperCase(); }
+
+  /* RENDER */
   function render() { renderGrid(); renderSidebar(); renderLiveCount(); }
 
   function visible(s) {
@@ -1122,28 +1305,49 @@
   function renderGrid() {
     const grid = document.getElementById('grid');
     const shown = streamers.filter(visible);
-    if (shown.length === 0) { grid.innerHTML = `<div class="empty"><p>No streamers match your filter</p></div>`; return; }
+    if (shown.length === 0) {
+      const isEmpty = streamers.length === 0;
+      grid.innerHTML = `<div class="empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <p>${isEmpty ? "You're not following anyone yet" : "No streamers match your filter"}</p>
+        <small>${isEmpty ? 'Try a different filter' : ''}</small>
+      </div>`;
+      return;
+    }
     grid.innerHTML = shown.map(s => cardHTML(s)).join('');
   }
 
   function cardHTML(s) {
     const d = data[s.username];
+    const loading = !d;
     const isLive = d?.isLive;
     const name = d?.displayName || s.display;
     const ini = initials(name);
-    return `<div class="card${!d ? ' loading' : ''}" onclick="openPlayer('${s.username}')">
+    return `<div class="card${loading ? ' loading' : ''}" data-user="${s.username}" onclick="openPlayer('${s.username}')">
       <div class="card-thumb">
-        ${d?.thumbnail ? `<img src="${d.thumbnail}" />` : `<div class="thumb-placeholder"></div>`}
+        ${d?.thumbnail
+          ? `<img src="${d.thumbnail}" alt="" onerror="this.parentNode.innerHTML='<div class=thumb-placeholder><svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.5\'><path d=\'M15 10l4.553-2.069A1 1 0 0 1 21 8.82v6.36a1 1 0 0 1-1.447.89L15 14M3 8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z\'/></svg></div>'" />`
+          : `<div class="thumb-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10l4.553-2.069A1 1 0 0 1 21 8.82v6.36a1 1 0 0 1-1.447.89L15 14M3 8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z"/></svg></div>`}
         <span class="card-badge ${isLive ? 'badge-live' : 'badge-offline'}">${isLive ? 'LIVE' : 'OFFLINE'}</span>
-        ${isLive ? `<div class="card-viewers">${fv(d.viewers)}</div>` : ''}
+        ${isLive ? `<div class="card-viewers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>${fv(d.viewers)}</div>` : ''}
+        <div class="card-hover-overlay">
+          <div class="play-circle">
+            <svg viewBox="0 0 24 24" fill="#0a0b0e"><polygon points="5,3 19,12 5,21"/></svg>
+          </div>
+        </div>
       </div>
       <div class="card-body">
         <div class="card-top">
-          <div class="card-avatar">${d?.avatar ? `<img src="${d.avatar}" />` : ini}</div>
+          <div class="card-avatar">
+            ${d?.avatar ? `<img src="${d.avatar}" alt="${name}" onerror="this.style.display='none';this.parentNode.innerText='${ini}'"/>` : ini}
+          </div>
           <div class="card-info">
             <div class="card-name">${name}</div>
             <div class="card-title">${d?.title || (isLive ? 'Streaming now' : 'Currently offline')}</div>
           </div>
+        </div>
+        <div class="card-footer">
+          <div class="card-category">${d?.category || ''}</div>
         </div>
       </div>
     </div>`;
@@ -1157,10 +1361,14 @@
         const d = data[s.username];
         const isLive = d?.isLive;
         const name = d?.displayName || s.display;
+        const ini = initials(name);
         const isActive = currentPlayer === s.username;
         return `<div class="sidebar-item${isActive ? ' active' : ''}" onclick="openPlayer('${s.username}')">
-          <span style="flex:1">${name}</span>
-          ${isLive ? `<span class="live-dot"></span>` : `<span class="live-dot hidden"></span>`}
+          <div class="sidebar-avatar">
+            ${d?.avatar ? `<img src="${d.avatar}" alt="${name}" onerror="this.style.display='none';this.parentNode.innerText='${ini}'"/>` : ini}
+          </div>
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${name}</span>
+          ${isLive ? `<span class="sidebar-viewers">${fv(d.viewers)}</span><span class="live-dot"></span>` : `<span class="live-dot hidden"></span>`}
         </div>`;
       }).join('');
   }
@@ -1168,15 +1376,35 @@
   function renderLiveCount() {
     const live = streamers.filter(s => data[s.username]?.isLive).length;
     const el = document.getElementById('live-count');
-    if (live > 0) { el.textContent = `— ${live} Live`; el.style.color = '#eb3d3d'; } else { el.textContent = ''; }
+    if (live > 0) { el.textContent = `— ${live} Live`; el.style.color = '#eb3d3d'; }
+    else { el.textContent = ''; }
   }
 
+  /* PLAYER */
   function openPlayer(username) {
+    const s = streamers.find(x => x.username === username);
+    if (!s) return;
     currentPlayer = username;
+
     document.getElementById('main-view').classList.add('hidden');
     document.getElementById('portfolio-view').classList.remove('active');
     document.getElementById('player-view').classList.add('active');
-    document.getElementById('player-iframe').src = `https://player.kick.com/${username}?autoplay=true`;
+
+    const iframe = document.getElementById('player-iframe');
+    const blocked = document.getElementById('player-blocked');
+    blocked.classList.remove('show');
+    iframe.src = `https://player.kick.com/${username}?autoplay=true`;
+
+    iframe.onload = null;
+    const timer = setTimeout(() => {
+      try {
+        if (!iframe.contentDocument && !iframe.contentWindow?.location?.href) {
+          showBlocked(username);
+        }
+      } catch(e) {}
+    }, 4000);
+    iframe.onerror = () => { clearTimeout(timer); showBlocked(username); };
+
     updatePlayerMeta(username);
     renderSidebar();
     loadMarketLayout(username);
@@ -1184,17 +1412,35 @@
     window.scrollTo(0, 0);
   }
 
+  function showBlocked(username) {
+    const blocked = document.getElementById('player-blocked');
+    document.getElementById('blocked-link').href = KICK + username;
+    blocked.classList.add('show');
+  }
+
   function updatePlayerMeta(username) {
+    const s = streamers.find(x => x.username === username);
     const d = data[username];
-    document.getElementById('player-name').textContent = d?.displayName || username;
+    const name = d?.displayName || s?.display || username;
+    document.getElementById('player-name').textContent = name;
     document.getElementById('player-kick-link').href = KICK + username;
     document.getElementById('player-title').textContent = d?.title || '';
-    if (d?.isLive) document.getElementById('player-live-badge').style.display = 'inline-block';
-    else document.getElementById('player-live-badge').style.display = 'none';
+    document.getElementById('player-category').textContent = d?.category || '';
+    const liveBadge = document.getElementById('player-live-badge');
+    const viewersEl = document.getElementById('player-viewers');
+    if (d?.isLive) {
+      liveBadge.style.display = 'inline-block';
+      viewersEl.style.display = 'flex';
+      document.getElementById('player-viewers-count').textContent = fv(d.viewers);
+    } else {
+      liveBadge.style.display = 'none';
+      viewersEl.style.display = 'none';
+    }
   }
 
   function goHome() {
     currentPlayer = null;
+    if (clockIntervalTimer) clearInterval(clockIntervalTimer);
     document.getElementById('player-iframe').src = '';
     document.getElementById('main-view').classList.remove('hidden');
     document.getElementById('player-view').classList.remove('active');
@@ -1202,16 +1448,19 @@
     renderSidebar();
   }
 
+  /* FILTER / SEARCH */
   function setFilter(f, btn) {
     filter = f;
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     render();
   }
-  
   function handleSearch() { searchQ = document.getElementById('search-input').value.toLowerCase().trim(); render(); }
+
+  /* TOAST */
   function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
 
+  /* INIT */
   loadAll();
   setInterval(loadAll, 60000);
 </script>
