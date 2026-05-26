@@ -6,7 +6,10 @@
   <title>My Kick Streamers & Prediction Market</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.6.2/dist/index.umd.min.js"></script>
+  
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -670,66 +673,119 @@
   let userWalletAddress = null;
   let activeMarketSelection = null;
   let clockIntervalTimer = null;
+  
+  // WalletConnect Modal Configuration Object
+  let globalWalletModalInstance = null;
+  let activeEthersProviderInstance = null;
 
   function save() { localStorage.setItem('mykick_streamers', JSON.stringify(streamers)); }
 
-  /* WEB3 CONNECTIONS */
-  async function connectWallet() {
-    if (!window.ethereum) {
-      toast("Please install MetaMask or a compatible Web3 Wallet!");
+  // Initialize the wallet modal components upon load
+  function initUniversalWalletConnectionKit() {
+    if (typeof WalletConnectModal === 'undefined') {
+      console.error("WalletConnect package did not resolve over CDN mapping bounds.");
       return;
     }
-    try {
-      // Direct raw RPC account extraction to circumvent extension UI blocks
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      userWalletAddress = accounts[0];
-      
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const network = await provider.getNetwork();
-      
-      if (network.chainId !== 137n) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: POLYGON_CHAIN_ID }],
-          });
-        } catch (switchError) {
-          if (switchError.code === 4001) throw switchError;
+    
+    // Configured using the default Open-Source Explorer parameters
+    globalWalletModalInstance = new WalletConnectModal.WalletConnectModal({
+      projectId: '951a8bf90731a556e9c9f6a6ef4ed87c', // Free connection optimization project hash token
+      chains: [137], // Root ID parameter for Polygon Mainnet configuration routing
+      themeMode: 'dark'
+    });
+  }
+
+  /* WEB3 CONNECTIONS */
+  async function connectWallet() {
+    // Fallback path mapping if a browser-integrated provider (e.g. MetaMask extension) is active
+    if (window.ethereum && window.ethereum.isMetaMask) {
+      try {
+        const rawAccounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        userWalletAddress = rawAccounts[0];
+        activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
+        
+        const currentNetworkDetails = await activeEthersProviderInstance.getNetwork();
+        if (currentNetworkDetails.chainId !== 137n) {
           try {
             await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: POLYGON_CHAIN_ID,
-                chainName: 'Polygon Mainnet',
-                nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
-                rpcUrls: ['https://polygon-rpc.com/'],
-                blockExplorerUrls: ['https://polygonscan.com/']
-              }],
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: POLYGON_CHAIN_ID }],
             });
-          } catch (addError) {
-            throw addError;
+          } catch (switchError) {
+            if (switchError.code === 4902) {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: POLYGON_CHAIN_ID,
+                  chainName: 'Polygon Mainnet',
+                  nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
+                  rpcUrls: ['https://polygon-rpc.com/'],
+                  blockExplorerUrls: ['https://polygonscan.com/']
+                }],
+              });
+            } else {
+              throw switchError;
+            }
           }
+          // Refresh provider context post-switch
+          activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
         }
+        
+        updateWalletUI();
+        if (activeMarketSelection) {
+          selectBetSlip(
+            activeMarketSelection.bucketId, 
+            activeMarketSelection.numericIdx, 
+            activeMarketSelection.label, 
+            activeMarketSelection.outcome, 
+            activeMarketSelection.pricePerShare
+          );
+        }
+        toast("Wallet Linked Over Extension! 🎉");
+        return;
+      } catch (extensionConnectionError) {
+        console.error("Extension pairing path failed, falling back to discovery modal mapping:", extensionConnectionError);
       }
-      
-      updateWalletUI();
-      if (activeMarketSelection) {
-        selectBetSlip(
-          activeMarketSelection.bucketId, 
-          activeMarketSelection.numericIdx, 
-          activeMarketSelection.label, 
-          activeMarketSelection.outcome, 
-          activeMarketSelection.pricePerShare
-        );
+    }
+
+    // Modal Discovery pipeline fallback for cross-platform compatibility mapping
+    if (!globalWalletModalInstance) {
+      initUniversalWalletConnectionKit();
+    }
+
+    try {
+      if (globalWalletModalInstance) {
+        toast("Opening multi-wallet connector...");
+        await globalWalletModalInstance.openModal();
+        
+        // Polling loop targeting the provider object instantiation changes post-selection
+        const connectionIntervalWatcher = setInterval(async () => {
+          if (window.ethereum) {
+            clearInterval(connectionIntervalWatcher);
+            globalWalletModalInstance.closeModal();
+            
+            try {
+              activeEthersProviderInstance = new ethers.BrowserProvider(window.ethereum);
+              const foundAccounts = await activeEthersProviderInstance.send("eth_accounts", []);
+              if (foundAccounts.length > 0) {
+                userWalletAddress = foundAccounts[0];
+                updateWalletUI();
+                toast("Connected successfully! 🎉");
+              }
+            } catch (initErr) {
+              console.error(initErr);
+            }
+          }
+        }, 1000);
+        
+        // Timeout safeguard to terminate the watcher loop if the modal is abandoned
+        setTimeout(() => clearInterval(connectionIntervalWatcher), 60000);
+      } else {
+        toast("Universal connect component unavailable. Use MetaMask extension.");
       }
-      toast("Wallet Connected to Polygon! 🎉");
     } catch (err) {
       console.error(err);
-      if (err.code === 4001) {
-        toast("Connection request cancelled by user.");
-      } else {
-        toast(`Error: ${err.message || "Connection Failed."}`);
-      }
+      toast("Connection instance refused.");
     }
   }
 
@@ -937,8 +993,10 @@
 
     try {
       toast("Initializing transaction routing...");
-      const web3Provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await web3Provider.getSigner();
+      
+      // Resolve structural reference using the active provider instance state
+      const resolvedProvider = activeEthersProviderInstance || new ethers.BrowserProvider(window.ethereum);
+      const signer = await resolvedProvider.getSigner();
 
       // Convert input values into base uint256 formats (USDC uses 6 decimal places on Polygon)
       const rawUsdcValue = ethers.parseUnits(usdAmountInput.toString(), 6);
@@ -1196,6 +1254,7 @@
   function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
 
   /* INIT */
+  initUniversalWalletConnectionKit();
   loadAll();
   setInterval(loadAll, 60000);
 </script>
