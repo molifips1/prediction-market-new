@@ -775,12 +775,21 @@
   // Core ABIs for interaction loops
   const PREDICTION_MARKET_ABI = [
     "function placeBet(bytes32 streamer, uint256 timestamp, uint8 bracketId, uint256 amount) external",
-    "function claim(bytes32 streamer, uint256 timestamp, uint8 bracketId) external"
+    "function claim(bytes32 streamer, uint256 timestamp, uint8 bracketId) external",
+    "function bracketVolumes(bytes32 streamer, uint256 timestamp, uint8 bracketId) external view returns (uint256)",
+    "function markets(bytes32 streamer, uint256 timestamp) external view returns (uint256 totalPot, uint256 totalFeeCollected, bool resolved, uint8 winningBracketId, bool active)",
+    "function userBets(bytes32 streamer, uint256 timestamp, address user, uint8 bracketId) external view returns (uint256)",
+    "event BetPlaced(bytes32 indexed streamer, uint256 timestamp, address user, uint8 bracketId, uint256 amount)"
   ];
   const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
     "function allowance(address owner, address spender) external view returns (uint256)"
   ];
+
+  // Read-only provider — no wallet needed for reads
+  const POLYGON_RPC = 'https://polygon-rpc.com/';
+  function getReadProvider() { return new ethers.JsonRpcProvider(POLYGON_RPC); }
+  function getReadContract() { return new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, getReadProvider()); }
 
   let streamers = JSON.parse(localStorage.getItem('mykick_streamers') || 'null') || [
     { username: 'haddzy',       display: 'Haddzy' },
@@ -933,77 +942,117 @@
     renderPortfolioRows();
   }
 
-  function renderPortfolioRows() {
+  async function renderPortfolioRows() {
     const container = document.getElementById('portfolio-rows-injector');
     if (!container) return;
-    
-    if (activeBetPositionsArray.length === 0) {
-      container.innerHTML = `<div class="empty" style="grid-column: 1/-1; padding: 40px 20px;"><p>No bets placed yet.</p></div>`;
+
+    if (!userWalletAddress) {
+      container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>Connect your wallet to see your bets.</p></div>';
       return;
     }
 
-    container.innerHTML = activeBetPositionsArray.map((position, idx) => {
-      const nowUnix = Math.floor(Date.now() / 1000);
-      const isResolved = nowUnix > position.endTime;
-      
-      return `
-        <div class="portfolio-data-row">
-          <span style="font-weight:600; color:#fff;">${position.streamer} Market</span>
-          <span>${position.bracketLabel} - <b style="color:${position.outcome === 'YES' ? 'var(--yes-green)' : 'var(--no-red)'}">${position.outcome}</b></span>
-          <span>${position.shares} shares</span>
-          <span style="color:${isResolved ? 'var(--green-text)' : 'var(--text-secondary)'}; font-weight:500;">
-            ${isResolved ? 'Resolved' : 'Active Trading'}
-          </span>
-          <div style="text-align: right;">
-            <button class="claim-btn" ${!isResolved ? 'disabled' : ''} onclick="claimPositionWinnings(${idx})">
-              ${isResolved ? 'Claim Payout' : 'Locked'}
-            </button>
-          </div>
-        </div>
-      `;
-    }).join('');
+    container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>Loading positions from chain...</p></div>';
+
+    try {
+      const contract = getReadContract();
+      const endTime  = getMarketTargetEndTime();
+
+      // Query BetPlaced events for this wallet across all streamers
+      const filter = contract.filters.BetPlaced(null, null, userWalletAddress);
+      const events  = await contract.queryFilter(filter, -100000);
+
+      if (events.length === 0) {
+        container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>No bets placed yet.</p></div>';
+        return;
+      }
+
+      // Deduplicate by streamer+timestamp+bracketId — keep latest amount
+      const posMap = {};
+      for (const ev of events) {
+        const key = ev.args.streamer + '_' + ev.args.timestamp.toString() + '_' + ev.args.bracketId.toString();
+        posMap[key] = ev.args;
+      }
+
+      const rows = await Promise.all(Object.values(posMap).map(async function(args) {
+        const streamerBytes32 = args.streamer;
+        const ts = args.timestamp;
+        const bracketId = Number(args.bracketId);
+        const nowUnix = Math.floor(Date.now() / 1000);
+        const isExpired = nowUnix > Number(ts);
+
+        // Get current user bet amount
+        const betAmt = await contract.userBets(streamerBytes32, ts, userWalletAddress, bracketId).catch(function() { return 0n; });
+        const betUsd = (Number(betAmt) / 1e6).toFixed(2);
+
+        // Get market state
+        const market = await contract.markets(streamerBytes32, ts).catch(function() { return null; });
+        const isResolved = market ? market.resolved : false;
+        const isClaimed  = betAmt === 0n && isExpired;
+
+        // Decode streamer name
+        let streamerName = streamerBytes32;
+        try { streamerName = ethers.decodeBytes32String(streamerBytes32); } catch(e) {}
+
+        const bracketLabels = ['Under threshold','Low bracket','Mid bracket','High bracket'];
+        const bracketLabel  = bracketLabels[bracketId] || ('Bracket ' + bracketId);
+
+        const statusText  = isClaimed ? 'Claimed' : (isResolved ? 'Resolved' : (isExpired ? 'Awaiting Resolution' : 'Active Trading'));
+        const statusColor = isClaimed ? 'var(--text-muted)' : (isResolved ? 'var(--green-text)' : (isExpired ? '#f5a623' : 'var(--text-secondary)'));
+
+        const canClaim = isResolved && betAmt > 0n;
+
+        return '<div class="portfolio-data-row">' +
+          '<span style="font-weight:600;color:#fff;">' + streamerName + ' Market</span>' +
+          '<span>' + bracketLabel + ' <b style="color:var(--yes-green)">YES</b></span>' +
+          '<span>$' + betUsd + ' USDC</span>' +
+          '<span style="color:' + statusColor + ';font-weight:500;">' + statusText + '</span>' +
+          '<div style="text-align:right;">' +
+            '<button class="claim-btn" ' + (!canClaim ? 'disabled' : '') + ' ' +
+              'onclick="claimOnChain('' + streamerBytes32 + '',' + ts.toString() + ',' + bracketId + ')">' +
+              (canClaim ? 'Claim Payout' : 'Locked') +
+            '</button>' +
+          '</div>' +
+        '</div>';
+      }));
+
+      container.innerHTML = rows.join('');
+    } catch(e) {
+      console.error('Portfolio load error:', e);
+      container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>Could not load positions. Check console.</p></div>';
+    }
   }
 
-  /* CLAIM PAYOUT PIPELINE */
-  async function claimPositionWinnings(index) {
-    if (!userWalletAddress) {
-      connectWallet();
-      return;
-    }
-
-    const position = activeBetPositionsArray[index];
+  async function claimOnChain(streamerBytes32, timestamp, bracketId) {
+    if (!userWalletAddress) { connectWallet(); return; }
     try {
-      toast("Connecting to execution pipeline...");
+      toast('Connecting to execution pipeline...');
       const finalProvider = activeEthersProviderInstance || new ethers.BrowserProvider(window.ethereum);
       const signer = await finalProvider.getSigner();
-
       const marketInstance = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
-      const usernameBytes32 = ethers.encodeBytes32String(position.streamer);
-
-      toast("Submitting claim transaction on-chain...");
-      const tx = await marketInstance.claim(
-        usernameBytes32,
-        position.endTime,
-        position.bracketId
-      );
-
-      toast("Awaiting ledger block verification...");
+      toast('Submitting claim transaction on-chain...');
+      const tx = await marketInstance.claim(streamerBytes32, timestamp, bracketId);
+      toast('Awaiting block confirmation...');
       await tx.wait(1);
-
-      toast("Payout successfully claimed! 💰");
-      activeBetPositionsArray.splice(index, 1);
-      saveBets();
+      toast('Payout successfully claimed! 💰');
       renderPortfolioRows();
-    } catch (err) {
+    } catch(err) {
       console.error(err);
-      toast("Claim execution halted or already processed.");
+      toast('Claim failed or already processed.');
     }
   }
+
+  /* claimPositionWinnings replaced by claimOnChain above */
 
   /* TRACK AND COMPUTE CLOCK INTERVAL TIMELINES OVER DESIGNATED TARGETS */
   function startTimelineClocks() {
     if (clockIntervalTimer) clearInterval(clockIntervalTimer);
     
+    // Refresh on-chain volumes every 30s
+    if (window._volumeRefreshTimer) clearInterval(window._volumeRefreshTimer);
+    window._volumeRefreshTimer = setInterval(function() {
+      if (currentPlayer) loadMarketLayout(currentPlayer);
+    }, 30000);
+
     clockIntervalTimer = setInterval(() => {
       if (!currentPlayer) return;
 
@@ -1043,40 +1092,69 @@
     return Math.floor(d.getTime() / 1000);
   }
 
-  /* RE-RENDER STACKED LIST BRACKETS SUB-STREAM PANEL */
-  function loadMarketLayout(username) {
+  /* RE-RENDER STACKED LIST BRACKETS — reads live volumes from chain */
+  async function loadMarketLayout(username) {
     const container = document.getElementById('market-buckets-list');
     const streamInfo = data[username];
-    
     activeMarketSelection = null;
     resetOrderSlipDefault();
 
     const baseCount = streamInfo?.viewers || 1500;
-    
     const brackets = [
-      { id: 'b1', idx: 0, label: `Under ${fv(Math.round(baseCount * 0.7))}` },
-      { id: 'b2', idx: 1, label: `${fv(Math.round(baseCount * 0.7))} – ${fv(Math.round(baseCount * 1.1))}` },
-      { id: 'b3', idx: 2, label: `${fv(Math.round(baseCount * 1.1))} – ${fv(Math.round(baseCount * 1.5))}` },
-      { id: 'b4', idx: 3, label: `Over ${fv(Math.round(baseCount * 1.5))}` }
+      { id: 'b1', idx: 0, label: 'Under ' + fv(Math.round(baseCount * 0.7)) },
+      { id: 'b2', idx: 1, label: fv(Math.round(baseCount * 0.7)) + ' – ' + fv(Math.round(baseCount * 1.1)) },
+      { id: 'b3', idx: 2, label: fv(Math.round(baseCount * 1.1)) + ' – ' + fv(Math.round(baseCount * 1.5)) },
+      { id: 'b4', idx: 3, label: 'Over ' + fv(Math.round(baseCount * 1.5)) }
     ];
 
-    container.innerHTML = brackets.map((b) => {
-      const yesPrice = 50; 
-      const noPrice = 50;
-
-      return `
-        <div class="bucket-row-item" id="card-${b.id}">
-          <span class="bucket-row-title">${b.label}</span>
-          <span class="bucket-row-volume">Volume: $0.00</span>
-          <button class="row-bet-btn yes" id="btn-yes-${b.id}" onclick="selectBetSlip('${b.id}', ${b.idx}, '${b.label}', 'YES', ${yesPrice})">
-            Yes ¢${yesPrice}
-          </button>
-          <button class="row-bet-btn no" id="btn-no-${b.id}" onclick="selectBetSlip('${b.id}', ${b.idx}, '${b.label}', 'NO', ${noPrice})">
-            No ¢${noPrice}
-          </button>
-        </div>
-      `;
+    // Render skeleton rows immediately
+    container.innerHTML = brackets.map(function(b) {
+      return '<div class="bucket-row-item" id="card-' + b.id + '">' +
+        '<span class="bucket-row-title">' + b.label + '</span>' +
+        '<span class="bucket-row-volume" id="vol-' + b.id + '">Loading...</span>' +
+        '<button class="row-bet-btn yes" id="btn-yes-' + b.id + '" disabled>Yes ¢--</button>' +
+        '<button class="row-bet-btn no"  id="btn-no-'  + b.id + '" disabled>No ¢--</button>' +
+        '</div>';
     }).join('');
+
+    try {
+      const contract = getReadContract();
+      const streamerBytes32 = ethers.encodeBytes32String(username);
+      const endTime = getMarketTargetEndTime();
+
+      const volResults = await Promise.all(
+        brackets.map(function(b) { return contract.bracketVolumes(streamerBytes32, endTime, b.idx).catch(function() { return 0n; }); })
+      );
+
+      const totalPot = volResults.reduce(function(a, v) { return a + BigInt(v); }, 0n);
+
+      brackets.forEach(function(b, i) {
+        const rawVol = BigInt(volResults[i]);
+        const volUsd = Number(rawVol) / 1e6;
+        let yesPrice = 50;
+        if (totalPot > 0n) {
+          yesPrice = Math.round((Number(rawVol) / Number(totalPot)) * 100);
+          yesPrice = Math.max(1, Math.min(99, yesPrice));
+        }
+        const noPrice = 100 - yesPrice;
+        const volEl  = document.getElementById('vol-'     + b.id);
+        const yesBtn = document.getElementById('btn-yes-' + b.id);
+        const noBtn  = document.getElementById('btn-no-'  + b.id);
+        if (volEl)  volEl.textContent  = 'Volume: $' + volUsd.toFixed(2);
+        if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes ¢' + yesPrice; yesBtn.onclick = (function(bid,bidx,blabel,price){ return function(){ selectBetSlip(bid,bidx,blabel,'YES',price); }; })(b.id,b.idx,b.label,yesPrice); }
+        if (noBtn)  { noBtn.disabled  = false; noBtn.textContent  = 'No ¢'  + noPrice;  noBtn.onclick  = (function(bid,bidx,blabel,price){ return function(){ selectBetSlip(bid,bidx,blabel,'NO', price); }; })(b.id,b.idx,b.label,noPrice); }
+      });
+    } catch(e) {
+      console.error('Failed to load on-chain market data:', e);
+      brackets.forEach(function(b) {
+        const volEl  = document.getElementById('vol-'     + b.id);
+        const yesBtn = document.getElementById('btn-yes-' + b.id);
+        const noBtn  = document.getElementById('btn-no-'  + b.id);
+        if (volEl)  volEl.textContent  = 'Volume: $0.00';
+        if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes ¢50'; yesBtn.onclick = (function(bid,bidx,blabel){ return function(){ selectBetSlip(bid,bidx,blabel,'YES',50); }; })(b.id,b.idx,b.label); }
+        if (noBtn)  { noBtn.disabled  = false; noBtn.textContent  = 'No ¢50';  noBtn.onclick  = (function(bid,bidx,blabel){ return function(){ selectBetSlip(bid,bidx,blabel,'NO', 50); }; })(b.id,b.idx,b.label); }
+      });
+    }
   }
 
   function resetOrderSlipDefault() {
@@ -1226,21 +1304,9 @@
       toast("Processing transaction verification...");
       await purchaseTx.wait(1);
       
-      // Push position item details to tracked arrays
-      const totalEstimatedShares = usdAmountInput / (activeMarketSelection.pricePerShare / 100);
-      activeBetPositionsArray.push({
-        streamer: currentPlayer,
-        endTime: targetUnixEpoch,
-        bracketId: targetBracketId,
-        bracketLabel: activeMarketSelection.label,
-        outcome: activeMarketSelection.outcome,
-        shares: totalEstimatedShares.toFixed(2)
-      });
-      saveBets();
-
       toast("Trade successfully filled on-chain! 🎉");
       resetOrderSlipDefault();
-      loadMarketLayout(currentPlayer);
+      await loadMarketLayout(currentPlayer);
 
     } catch (txError) {
       console.error(txError);
@@ -1441,6 +1507,7 @@
   function goHome() {
     currentPlayer = null;
     if (clockIntervalTimer) clearInterval(clockIntervalTimer);
+    if (window._volumeRefreshTimer) clearInterval(window._volumeRefreshTimer);
     document.getElementById('player-iframe').src = '';
     document.getElementById('main-view').classList.remove('hidden');
     document.getElementById('player-view').classList.remove('active');
