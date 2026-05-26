@@ -1001,17 +1001,16 @@
 
         const canClaim = isResolved && betAmt > 0n;
 
+        const claimData = 'data-s="' + streamerBytes32 + '" data-t="' + ts.toString() + '" data-b="' + bracketId + '"';
+        const claimBtn = canClaim
+          ? '<button class="claim-btn" ' + claimData + ' onclick="claimOnChainBtn(this)">Claim Payout</button>'
+          : '<button class="claim-btn" disabled>Locked</button>';
         return '<div class="portfolio-data-row">' +
           '<span style="font-weight:600;color:#fff;">' + streamerName + ' Market</span>' +
           '<span>' + bracketLabel + ' <b style="color:var(--yes-green)">YES</b></span>' +
           '<span>$' + betUsd + ' USDC</span>' +
           '<span style="color:' + statusColor + ';font-weight:500;">' + statusText + '</span>' +
-          '<div style="text-align:right;">' +
-            '<button class="claim-btn" ' + (!canClaim ? 'disabled' : '') + ' ' +
-              'onclick="claimOnChain('' + streamerBytes32 + '',' + ts.toString() + ',' + bracketId + ')">' +
-              (canClaim ? 'Claim Payout' : 'Locked') +
-            '</button>' +
-          '</div>' +
+          '<div style="text-align:right;">' + claimBtn + '</div>' +
         '</div>';
       }));
 
@@ -1020,6 +1019,13 @@
       console.error('Portfolio load error:', e);
       container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>Could not load positions. Check console.</p></div>';
     }
+  }
+
+  function claimOnChainBtn(btn) {
+    const s = btn.getAttribute('data-s');
+    const t = BigInt(btn.getAttribute('data-t'));
+    const b = parseInt(btn.getAttribute('data-b'));
+    claimOnChain(s, t, b);
   }
 
   async function claimOnChain(streamerBytes32, timestamp, bracketId) {
