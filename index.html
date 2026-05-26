@@ -74,6 +74,16 @@
     .nav-search input::placeholder { color: var(--text-muted); }
     .nav-search-icon { position: absolute; right: 13px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
 
+    .nav-right-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    
+    .nav-portfolio-btn {
+      background: var(--bg-card); color: var(--text-primary);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 8px 14px; font-family: inherit; font-size: 13px; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.15s;
+    }
+    .nav-portfolio-btn:hover { background: var(--bg-card-hover); border-color: var(--border-hover); }
+
     .nav-wallet-btn {
       display: flex; align-items: center; gap: 6px;
       background: var(--polygon-purple); color: #ffffff;
@@ -122,34 +132,18 @@
     .filter-btn.active { background: var(--green); border-color: var(--green); color: #0a0b0e; font-weight: 600; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 
-    /* CARDS */
-    .card { background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; transition: background .2s, transform .15s; border: 1px solid transparent; }
-    .card:hover { background: var(--bg-card-hover); border-color: var(--border); transform: translateY(-2px); }
-    .card-thumb { position: relative; aspect-ratio: 16/9; background: #111318; overflow: hidden; }
-    .card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .thumb-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #111318; }
-    .thumb-placeholder svg { width: 40px; height: 40px; opacity: .18; }
-    .card-badge { position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 700; letter-spacing: .05em; padding: 3px 8px; border-radius: 4px; }
-    .badge-live { background: var(--live-red); color: #fff; }
-    .badge-offline { background: rgba(0,0,0,.6); color: #999; }
-    .card-viewers { position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,.7); color: #fff; font-size: 12px; font-weight: 500; padding: 3px 8px; border-radius: 4px; display: flex; align-items: center; gap: 5px; }
-    .card-viewers svg { width: 12px; height: 12px; }
-    .card-hover-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0); transition: background .2s; }
-    .card:hover .card-hover-overlay { background: rgba(0,0,0,.35); }
-    .play-circle { width: 52px; height: 52px; border-radius: 50%; background: var(--green); display: flex; align-items: center; justify-content: center; opacity: 0; transform: scale(.85); transition: opacity .2s, transform .2s; }
-    .card:hover .play-circle { opacity: 1; transform: scale(1); }
-    .play-circle svg { width: 22px; height: 22px; margin-left: 3px; }
-    .card-body { padding: 12px 14px 14px; }
-    .card-top { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; }
-    .card-avatar { width: 38px; height: 38px; border-radius: 50%; background: #252738; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--text-secondary); flex-shrink: 0; overflow: hidden; }
-    .card-avatar img { width: 100%; height: 100%; object-fit: cover; }
-    .card-info { flex: 1; min-width: 0; }
-    .card-name { font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .card-title { font-size: 12px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .card-footer { display: flex; align-items: center; justify-content: space-between; }
-    .card-category { font-size: 12px; color: var(--text-muted); }
+    /* PORTFOLIO ACCORDION VIEW */
+    #portfolio-view { display: none; flex: 1; margin-left: var(--sidebar-w); padding: 28px 28px 40px; min-width: 0; }
+    #portfolio-view.active { display: block; }
+    .portfolio-table-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-top: 16px; }
+    .portfolio-header-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr 1.5fr; padding: 14px 20px; background: var(--bg-nav); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    .portfolio-data-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr 1.5fr; padding: 16px 20px; border-bottom: 1px solid var(--border); font-size: 14px; align-items: center; }
+    .portfolio-data-row:last-child { border-bottom: none; }
+    .claim-btn { background: var(--yes-green); color: #0a0b0e; border: none; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; transition: opacity 0.15s; }
+    .claim-btn:hover { opacity: 0.88; }
+    .claim-btn:disabled { background: var(--bg-input); color: var(--text-muted); cursor: not-allowed; }
 
-    /* POLYMARKET SELECTION MODAL SYSTEM */
+    /* POLYMARKET SELECTION DISCOVERY POPUP COMPONENT */
     .custom-wallet-modal-overlay {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
       display: none; align-items: center; justify-content: center;
@@ -543,7 +537,7 @@
     }
     @media (max-width: 700px) {
       aside { display: none; }
-      main, #player-view { margin-left: 0; padding: 16px; }
+      main, #player-view, #portfolio-view { margin-left: 0; padding: 16px; }
       .nav-search { max-width: 180px; }
       .player-topbar { padding: 10px 12px; }
     }
@@ -564,10 +558,17 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     </span>
   </div>
-  <button id="wallet-btn" class="nav-wallet-btn" onclick="connectWallet()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3"/></svg>
-    <span id="wallet-btn-text">Connect Wallet</span>
-  </button>
+  
+  <div class="nav-right-actions">
+    <button class="nav-portfolio-btn" onclick="openPortfolioView()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      My Bets
+    </button>
+    <button id="wallet-btn" class="nav-wallet-btn" onclick="connectWallet()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3"/></svg>
+      <span id="wallet-btn-text">Connect Wallet</span>
+    </button>
+  </div>
 </nav>
 
 <div class="layout">
@@ -584,6 +585,23 @@
     </div>
     <div class="grid" id="grid"></div>
   </main>
+
+  <div id="portfolio-view">
+    <div class="page-header">
+      <h1 class="page-title">Your <span>Positions Dashboard</span></h1>
+    </div>
+    <div class="portfolio-table-wrap">
+      <div class="portfolio-header-row">
+        <span>Market / Streamer</span>
+        <span>Bracket Option</span>
+        <span>Shares Held</span>
+        <span>Status</span>
+        <span style="text-align: right;">Action</span>
+      </div>
+      <div id="portfolio-rows-injector">
+        </div>
+    </div>
+  </div>
 
   <div id="player-view">
     <div class="player-topbar" style="display:flex; flex-direction:column; align-items:flex-start; gap:8px;">
@@ -729,7 +747,8 @@
 
   // Core ABIs for interaction loops
   const PREDICTION_MARKET_ABI = [
-    "function buyShares(bytes32 streamer, uint256 endTime, uint8 bracketId, bool outcome, uint256 usdcAmount) external"
+    "function buyShares(bytes32 streamer, uint256 endTime, uint8 bracketId, bool outcome, uint256 usdcAmount) external",
+    "function claimWinnings(bytes32 streamer, uint256 endTime, uint8 bracketId) external"
   ];
   const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
@@ -756,10 +775,14 @@
   let activeMarketSelection = null;
   let clockIntervalTimer = null;
   
+  // Tracking placed positions array
+  let activeBetPositionsArray = JSON.parse(localStorage.getItem('mykick_bets') || '[]');
+  
   let activeEthersProviderInstance = null;
   let selectedActiveWalletProvider = null;
 
   function save() { localStorage.setItem('mykick_streamers', JSON.stringify(streamers)); }
+  function saveBets() { localStorage.setItem('mykick_bets', JSON.stringify(activeBetPositionsArray)); }
 
   /* UNIVERSAL MODAL TOGGLE PIPELINES */
   function connectWallet() {
@@ -781,7 +804,6 @@
       closeWalletPopup();
       toast("Connecting to provider interface...");
       
-      // Isolate MetaMask specifically from multi-extension arrays
       let targetedExtension = window.ethereum;
       if (window.ethereum.providers && window.ethereum.providers.length > 0) {
         targetedExtension = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum.providers[0];
@@ -821,6 +843,7 @@
       }
       
       updateWalletUI();
+      renderPortfolioRows();
       if (activeMarketSelection) {
         selectBetSlip(
           activeMarketSelection.bucketId, 
@@ -858,6 +881,7 @@
     targetedListener.on('accountsChanged', (accounts) => {
       userWalletAddress = accounts.length > 0 ? accounts[0] : null;
       updateWalletUI();
+      renderPortfolioRows();
       if (activeMarketSelection) {
         selectBetSlip(
           activeMarketSelection.bucketId, 
@@ -869,6 +893,84 @@
       }
     });
     targetedListener.on('chainChanged', () => window.location.reload());
+  }
+
+  /* PORTFOLIO VIEW CONTROLLER */
+  function openPortfolioView() {
+    currentPlayer = null;
+    if (clockIntervalTimer) clearInterval(clockIntervalTimer);
+    document.getElementById('player-iframe').src = '';
+    document.getElementById('main-view').classList.add('hidden');
+    document.getElementById('player-view').classList.remove('active');
+    document.getElementById('portfolio-view').classList.add('active');
+    renderPortfolioRows();
+  }
+
+  function renderPortfolioRows() {
+    const container = document.getElementById('portfolio-rows-injector');
+    if (!container) return;
+    
+    if (activeBetPositionsArray.length === 0) {
+      container.innerHTML = `<div class="empty" style="grid-column: 1/-1; padding: 40px 20px;"><p>No bets placed yet.</p></div>`;
+      return;
+    }
+
+    container.innerHTML = activeBetPositionsArray.map((position, idx) => {
+      const nowUnix = Math.floor(Date.now() / 1000);
+      const isResolved = nowUnix > position.endTime;
+      
+      return `
+        <div class="portfolio-data-row">
+          <span style="font-weight:600; color:#fff;">${position.streamer} Market</span>
+          <span>${position.bracketLabel} - <b style="color:${position.outcome === 'YES' ? 'var(--yes-green)' : 'var(--no-red)'}">${position.outcome}</b></span>
+          <span>${position.shares} shares</span>
+          <span style="color:${isResolved ? 'var(--green-text)' : 'var(--text-secondary)'}; font-weight:500;">
+            ${isResolved ? 'Resolved' : 'Active Trading'}
+          </span>
+          <div style="text-align: right;">
+            <button class="claim-btn" ${!isResolved ? 'disabled' : ''} onclick="claimPositionWinnings(${idx})">
+              ${isResolved ? 'Claim Payout' : 'Locked'}
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  /* CLAIM PAYOUT PIPELINE */
+  async function claimPositionWinnings(index) {
+    if (!userWalletAddress) {
+      connectWallet();
+      return;
+    }
+
+    const position = activeBetPositionsArray[index];
+    try {
+      toast("Connecting to execution pipeline...");
+      const finalProvider = activeEthersProviderInstance || new ethers.BrowserProvider(window.ethereum);
+      const signer = await finalProvider.getSigner();
+
+      const marketInstance = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
+      const usernameBytes32 = ethers.encodeBytes32String(position.streamer);
+
+      toast("Submitting claim transaction on-chain...");
+      const tx = await marketInstance.claimWinnings(
+        usernameBytes32,
+        position.endTime,
+        position.bracketId
+      );
+
+      toast("Awaiting ledger block verification...");
+      await tx.wait(1);
+
+      toast("Payout successfully claimed! 💰");
+      activeBetPositionsArray.splice(index, 1);
+      saveBets();
+      renderPortfolioRows();
+    } catch (err) {
+      console.error(err);
+      toast("Claim execution halted or already processed.");
+    }
   }
 
   /* TRACK AND COMPUTE CLOCK INTERVAL TIMELINES OVER DESIGNATED TARGETS */
@@ -1091,6 +1193,19 @@
 
       toast("Processing transaction verification...");
       await purchaseTx.wait(1);
+      
+      // Push position item details to tracked arrays
+      const totalEstimatedShares = usdAmountInput / (activeMarketSelection.pricePerShare / 100);
+      activeBetPositionsArray.push({
+        streamer: currentPlayer,
+        endTime: targetUnixEpoch,
+        bracketId: targetBracketId,
+        bracketLabel: activeMarketSelection.label,
+        outcome: activeMarketSelection.outcome,
+        shares: totalEstimatedShares.toFixed(2)
+      });
+      saveBets();
+
       toast("Trade successfully filled on-chain! 🎉");
       resetOrderSlipDefault();
       loadMarketLayout(currentPlayer);
@@ -1240,6 +1355,7 @@
     currentPlayer = username;
 
     document.getElementById('main-view').classList.add('hidden');
+    document.getElementById('portfolio-view').classList.remove('active');
     document.getElementById('player-view').classList.add('active');
 
     const iframe = document.getElementById('player-iframe');
@@ -1296,6 +1412,7 @@
     document.getElementById('player-iframe').src = '';
     document.getElementById('main-view').classList.remove('hidden');
     document.getElementById('player-view').classList.remove('active');
+    document.getElementById('portfolio-view').classList.remove('active');
     renderSidebar();
   }
 
