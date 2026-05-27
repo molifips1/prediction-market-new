@@ -1339,13 +1339,12 @@
 
       if (explicitAllowance < rawUsdcValue) {
         toast("Approving USDC transfer parameters...");
-        const approvalTx = await tokenInstance.approve(CONTRACT_ADDRESS, ethers.MaxUint256);
-        toast("Waiting for approval confirmation...");
-        try { await finalEthersProvider.waitForTransaction(approvalTx.hash, 1, 30000); } catch(e) { /* continue */ }
+        await tokenInstance.approve(CONTRACT_ADDRESS, ethers.MaxUint256);
+        toast("Approval sent — submitting bet...");
+        // Small delay to let approval propagate before placing bet
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
-
       const baseViewers = BigInt(Math.round(window._currentMarketBaseViewers || (data[currentPlayer]?.viewers) || 1500));
-      console.log("DEBUG placeBet:", { targetUnixEpoch, now: Math.floor(Date.now()/1000), diff: targetUnixEpoch - Math.floor(Date.now()/1000), targetBracketId, rawUsdcValue: rawUsdcValue.toString(), baseViewers: baseViewers.toString() });
       const purchaseTx = await marketInstance.placeBet(
         usernameBytes32,
         targetUnixEpoch,
