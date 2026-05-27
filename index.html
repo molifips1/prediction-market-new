@@ -1315,46 +1315,33 @@
 
   /* LIVE BLOCKCHAIN ROUTING PIPELINE */
   async function submitFinalBet() {
-    if (!userWalletAddress) {
-      connectWallet();
-      return;
-    }
-    
+    if (!userWalletAddress) { connectWallet(); return; }
+
     const usdAmountInput = parseFloat(document.getElementById('order-amount-input').value) || 0;
-    if (usdAmountInput <= 0) {
-      toast("Please enter a valid investment amount!");
-      return;
-    }
+    if (usdAmountInput <= 0) { toast("Please enter a valid investment amount!"); return; }
 
     try {
       toast("Initializing transaction routing...");
-      
+
       const providerSource = selectedActiveWalletProvider || window.ethereum;
       const finalEthersProvider = new ethers.BrowserProvider(providerSource);
       const signer = await finalEthersProvider.getSigner();
 
-      // Convert input values into base uint256 formats (USDC uses 6 decimal places on Polygon)
-      const rawUsdcValue = ethers.parseUnits(usdAmountInput.toString(), 6);
-      
-      // Parse out parameters needed for contract execution structures
+      const rawUsdcValue    = ethers.parseUnits(usdAmountInput.toString(), 6);
       const usernameBytes32 = ethers.encodeBytes32String(currentPlayer);
-      
-      // Market end time: top of the next hour
       const targetUnixEpoch = getMarketTargetEndTime();
       const targetBracketId = activeMarketSelection.numericIdx;
-      // Setup dynamic standard interface objects
-      const tokenInstance = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
-      const marketInstance = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
+      const tokenInstance   = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
+      const marketInstance  = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
 
-      // Evaluate allowance thresholds before dispatching transfers
       toast("Checking token trade allowance bounds...");
       const explicitAllowance = await tokenInstance.allowance(userWalletAddress, CONTRACT_ADDRESS);
-      
+
       if (explicitAllowance < rawUsdcValue) {
         toast("Approving USDC transfer parameters...");
         const approvalTx = await tokenInstance.approve(CONTRACT_ADDRESS, ethers.MaxUint256);
-        toast("Waiting for block confirmation...");
-        await finalEthersProvider.waitForTransaction(approvalTx.hash, 1, 60000);
+        toast("Waiting for approval confirmation...");
+        try { await finalEthersProvider.waitForTransaction(approvalTx.hash, 1, 30000); } catch(e) { /* continue */ }
       }
 
       toast("Submitting trade directly to contract...");
@@ -1367,13 +1354,10 @@
         baseViewers
       );
 
-      toast("Processing transaction verification...");
-      toast("Processing transaction verification...");
-      const receipt = await finalEthersProvider.waitForTransaction(purchaseTx.hash, 1, 60000);
-      if (!receipt || receipt.status === 0) throw new Error("Transaction failed on-chain");
-      toast("Trade successfully filled on-chain! 🎉");
+      toast("Trade successfully submitted on-chain! 🎉");
       resetOrderSlipDefault();
-      await loadMarketLayout(currentPlayer);
+      // Reload market data after 5s to give chain time to confirm
+      setTimeout(async function() { if (currentPlayer) await loadMarketLayout(currentPlayer); }, 5000);
 
     } catch (txError) {
       console.error(txError);
@@ -1384,6 +1368,7 @@
       }
     }
   }
+
 
   /* FETCH */
   async function fetchOne(username) {
