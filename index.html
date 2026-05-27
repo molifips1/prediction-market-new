@@ -774,12 +774,12 @@
 
   // Core ABIs for interaction loops
   const PREDICTION_MARKET_ABI = [
-    "function placeBet(bytes32 streamer, uint256 timestamp, uint8 bracketId, uint256 amount, uint256 baseViewerCount) external",
-    "function claim(bytes32 streamer, uint256 timestamp, uint8 bracketId) external",
-    "function bracketVolumes(bytes32 streamer, uint256 timestamp, uint8 bracketId) external view returns (uint256)",
-    "function markets(bytes32 streamer, uint256 timestamp) external view returns (uint256 totalPot, uint256 totalFeeCollected, bool resolved, uint8 winningBracketId, bool active, uint256 baseViewerCount)",
-    "function userBets(bytes32 streamer, uint256 timestamp, address user, uint8 bracketId) external view returns (uint256)",
-    "event BetPlaced(bytes32 indexed streamer, uint256 timestamp, address user, uint8 bracketId, uint256 amount, uint256 baseViewerCount)"
+    "function placeBet(bytes32, uint256, uint8, uint256, uint256) external",
+    "function claim(bytes32, uint256, uint8) external",
+    "function bracketVolumes(bytes32, uint256, uint8) external view returns (uint256)",
+    "function markets(bytes32, uint256) external view returns (uint256, uint256, bool, uint8, bool, uint256)",
+    "function userBets(bytes32, uint256, address, uint8) external view returns (uint256)",
+    "event BetPlaced(bytes32 indexed, uint256, address, uint8, uint256, uint256)"
   ];
   const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
