@@ -1354,7 +1354,7 @@
         toast("Approving USDC transfer parameters...");
         const approvalTx = await tokenInstance.approve(CONTRACT_ADDRESS, ethers.MaxUint256);
         toast("Waiting for block confirmation...");
-        await approvalTx.wait(1);
+        await finalEthersProvider.waitForTransaction(approvalTx.hash, 1, 60000);
       }
 
       toast("Submitting trade directly to contract...");
@@ -1368,8 +1368,9 @@
       );
 
       toast("Processing transaction verification...");
-      await purchaseTx.wait(1);
-      
+      toast("Processing transaction verification...");
+      const receipt = await finalEthersProvider.waitForTransaction(purchaseTx.hash, 1, 60000);
+      if (!receipt || receipt.status === 0) throw new Error("Transaction failed on-chain");
       toast("Trade successfully filled on-chain! 🎉");
       resetOrderSlipDefault();
       await loadMarketLayout(currentPlayer);
