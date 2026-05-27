@@ -769,17 +769,17 @@
   const WORKER_URL = 'https://blue-unit-891d.apetersen280.workers.dev/'; 
   
   const POLYGON_CHAIN_ID = '0x89'; 
-  const CONTRACT_ADDRESS = '0xcf84eC9fC4A81A29362d1AE1698f10FfDADF4046';
+  const CONTRACT_ADDRESS = '0x2B0eE22c992FAFCE4e21B1Fa50b8fEf4D9Cf3342';
   const USDC_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
 
   // Core ABIs for interaction loops
   const PREDICTION_MARKET_ABI = [
-    "function placeBet(bytes32 streamer, uint256 timestamp, uint8 bracketId, uint256 amount) external",
+    "function placeBet(bytes32 streamer, uint256 timestamp, uint8 bracketId, uint256 amount, uint256 baseViewerCount) external",
     "function claim(bytes32 streamer, uint256 timestamp, uint8 bracketId) external",
     "function bracketVolumes(bytes32 streamer, uint256 timestamp, uint8 bracketId) external view returns (uint256)",
-    "function markets(bytes32 streamer, uint256 timestamp) external view returns (uint256 totalPot, uint256 totalFeeCollected, bool resolved, uint8 winningBracketId, bool active)",
+    "function markets(bytes32 streamer, uint256 timestamp) external view returns (uint256 totalPot, uint256 totalFeeCollected, bool resolved, uint8 winningBracketId, bool active, uint256 baseViewerCount)",
     "function userBets(bytes32 streamer, uint256 timestamp, address user, uint8 bracketId) external view returns (uint256)",
-    "event BetPlaced(bytes32 indexed streamer, uint256 timestamp, address user, uint8 bracketId, uint256 amount)"
+    "event BetPlaced(bytes32 indexed streamer, uint256 timestamp, address user, uint8 bracketId, uint256 amount, uint256 baseViewerCount)"
   ];
   const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
@@ -1130,14 +1130,40 @@
     return Math.floor(d.getTime() / 1000);
   }
 
-  /* RE-RENDER STACKED LIST BRACKETS — reads live volumes from chain */
+  /* RE-RENDER STACKED LIST BRACKETS — reads live volumes + baseViewerCount from chain */
   async function loadMarketLayout(username) {
     const container = document.getElementById('market-buckets-list');
     const streamInfo = data[username];
     activeMarketSelection = null;
     resetOrderSlipDefault();
 
-    const baseCount = streamInfo?.viewers || 1500;
+    const isLive = streamInfo?.isLive;
+
+    // Hide betting UI entirely if streamer is offline
+    if (!isLive) {
+      container.innerHTML = '<div class="order-empty-state" style="padding:32px;text-align:center;color:var(--text-muted);">' +
+        '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:.4"><circle cx="12" cy="12" r="10"/><line x1="4.93" x2="19.07" y1="4.93" y2="19.07"/></svg>' +
+        '<p style="font-size:14px;font-weight:600;margin-bottom:4px;">Streamer Offline</p>' +
+        '<p style="font-size:12px;">Prediction markets are only available while the streamer is live.</p>' +
+        '</div>';
+      return;
+    }
+
+    // Try to read baseViewerCount from chain; fall back to live viewer count
+    let baseCount = streamInfo?.viewers || 1500;
+    try {
+      const rc = await getReadContract();
+      const streamerBytes32 = ethers.encodeBytes32String(username);
+      const endTime = getMarketTargetEndTime();
+      const marketData = await rc.markets(streamerBytes32, endTime);
+      if (marketData.active && Number(marketData.baseViewerCount) > 0) {
+        baseCount = Number(marketData.baseViewerCount);
+      }
+    } catch(e) { /* use live viewer count as fallback */ }
+
+    // Store for use when submitting a bet
+    window._currentMarketBaseViewers = baseCount;
+
     const brackets = [
       { id: 'b1', idx: 0, label: 'Under ' + fv(Math.round(baseCount * 0.7)) },
       { id: 'b2', idx: 1, label: fv(Math.round(baseCount * 0.7)) + ' – ' + fv(Math.round(baseCount * 1.1)) },
@@ -1157,11 +1183,11 @@
 
     try {
       const contract = await getReadContract();
-      const streamerBytes32 = ethers.encodeBytes32String(username);
+      const streamerBytes32b = ethers.encodeBytes32String(username);
       const endTime = getMarketTargetEndTime();
 
       const volResults = await Promise.all(
-        brackets.map(function(b) { return contract.bracketVolumes(streamerBytes32, endTime, b.idx).catch(function() { return 0n; }); })
+        brackets.map(function(b) { return contract.bracketVolumes(streamerBytes32b, endTime, b.idx).catch(function() { return 0n; }); })
       );
 
       const totalPot = volResults.reduce(function(a, v) { return a + BigInt(v); }, 0n);
@@ -1332,11 +1358,13 @@
       }
 
       toast("Submitting trade directly to contract...");
+      const baseViewers = window._currentMarketBaseViewers || (data[currentPlayer]?.viewers) || 1500;
       const purchaseTx = await marketInstance.placeBet(
         usernameBytes32,
         targetUnixEpoch,
         targetBracketId,
-        rawUsdcValue
+        rawUsdcValue,
+        baseViewers
       );
 
       toast("Processing transaction verification...");
