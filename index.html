@@ -1344,11 +1344,8 @@
         try { await finalEthersProvider.waitForTransaction(approvalTx.hash, 1, 30000); } catch(e) { /* continue */ }
       }
 
-      const debugTime = getMarketTargetEndTime();
-      const debugNow = Math.floor(Date.now()/1000);
-      console.log("DEBUG placeBet:", { targetUnixEpoch, debugTime, debugNow, diff: targetUnixEpoch - debugNow, targetBracketId, rawUsdcValue: rawUsdcValue.toString(), baseViewers: String(baseViewers) });
-      toast("Submitting trade directly to contract...");
       const baseViewers = BigInt(Math.round(window._currentMarketBaseViewers || (data[currentPlayer]?.viewers) || 1500));
+      console.log("DEBUG placeBet:", { targetUnixEpoch, now: Math.floor(Date.now()/1000), diff: targetUnixEpoch - Math.floor(Date.now()/1000), targetBracketId, rawUsdcValue: rawUsdcValue.toString(), baseViewers: baseViewers.toString() });
       const purchaseTx = await marketInstance.placeBet(
         usernameBytes32,
         targetUnixEpoch,
