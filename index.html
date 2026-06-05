@@ -1477,7 +1477,7 @@
   function renderSidebar() {
     const sb = document.getElementById('sidebar');
     const sorted = [...streamers].sort((a, b) => (data[b.username]?.isLive ? 1 : 0) - (data[a.username]?.isLive ? 1 : 0));
-    sb.innerHTML = `<div class="sidebar-section-label">Following</div>` +
+    sb.innerHTML = `<div class="sidebar-section-label">Streamers</div>` +
       sorted.map(s => {
         const d = data[s.username];
         const isLive = d?.isLive;
