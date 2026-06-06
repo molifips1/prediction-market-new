@@ -1370,6 +1370,22 @@
 
 
   /* FETCH */
+  // Kick returns the live thumbnail under different keys depending on endpoint:
+  //   thumbnail.url | thumbnail.src | thumbnail.responsive | thumbnail.srcset (a "url 720w, url 1080w" list)
+  function pickThumb(ls) {
+    const t = ls && ls.thumbnail;
+    if (!t) return null;
+    if (typeof t === 'string') return t;
+    if (t.url) return t.url;
+    if (t.src) return t.src;
+    const set = t.responsive || t.srcset;
+    if (typeof set === 'string' && set.trim()) {
+      // take the first URL out of the srcset-style list
+      return set.split(',')[0].trim().split(/\s+/)[0] || null;
+    }
+    return null;
+  }
+
   async function fetchOne(username) {
     try {
       const r = await fetch(`${WORKER_URL}?user=${encodeURIComponent(username)}`);
@@ -1383,7 +1399,7 @@
         title: d.livestream?.session_title || '',
         viewers: d.livestream?.viewer_count || 0,
         category: d.livestream?.categories?.[0]?.name || d.recent_categories?.[0]?.name || '',
-        thumbnail: d.livestream?.thumbnail?.url || null,
+        thumbnail: pickThumb(d.livestream),
         avatar: d.user?.profile_pic || null,
         displayName: d.user?.username || username,
       };
