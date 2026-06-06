@@ -158,6 +158,7 @@
     .card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .thumb-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #111318; }
     .thumb-placeholder svg { width: 40px; height: 40px; opacity: .18; }
+    .thumb-placeholder img.thumb-avatar { width: 76px; height: 76px; border-radius: 50%; object-fit: cover; opacity: .9; box-shadow: 0 2px 12px rgba(0,0,0,.5); }
     .card-badge { position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 700; letter-spacing: .05em; padding: 3px 8px; border-radius: 4px; }
     .badge-live { background: var(--live-red); color: #fff; }
     .badge-offline { background: rgba(0,0,0,.6); color: #999; }
@@ -771,6 +772,8 @@
 <script>
   const KICK = 'https://kick.com/';
   const WORKER_URL = 'https://blue-unit-891d.apetersen280.workers.dev/'; 
+  // Separate worker that returns only { thumbnail } from Kick v1. Set this after you deploy it.
+  const THUMB_WORKER_URL = 'https://streamslush-thumbs.apetersen280.workers.dev/';
   
   const POLYGON_CHAIN_ID = '0x89'; 
   const CONTRACT_ADDRESS = '0x2B0eE22c992FAFCE4e21B1Fa50b8fEf4D9Cf3342';
@@ -1399,7 +1402,7 @@
         title: d.livestream?.session_title || '',
         viewers: d.livestream?.viewer_count || 0,
         category: d.livestream?.categories?.[0]?.name || d.recent_categories?.[0]?.name || '',
-        thumbnail: pickThumb(d.livestream),
+        thumbnail: pickThumb(d.livestream),  // live thumb if present; separate worker fills the rest
         avatar: d.user?.profile_pic || null,
         displayName: d.user?.username || username,
       };
@@ -1409,11 +1412,30 @@
     }
   }
 
+  // Separate, optional call: ask the thumbnail worker for a recent stream still.
+  // Failure here never affects live status — it just leaves the placeholder.
+  async function fetchThumb(username) {
+    if (!THUMB_WORKER_URL || THUMB_WORKER_URL.startsWith('PASTE_')) return null;
+    try {
+      const r = await fetch(`${THUMB_WORKER_URL}?user=${encodeURIComponent(username)}`);
+      if (!r.ok) return null;
+      const d = await r.json();
+      return d && d.thumbnail ? d.thumbnail : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function loadAll() {
     render();
     await Promise.all(streamers.map(async s => {
       data[s.username] = await fetchOne(s.username);
       render();
+      // Only bother fetching a thumbnail for live streamers that don't already have one.
+      if (data[s.username]?.isLive && !data[s.username].thumbnail) {
+        const thumb = await fetchThumb(s.username);
+        if (thumb && data[s.username]) { data[s.username].thumbnail = thumb; render(); }
+      }
       if (currentPlayer === s.username) {
         updatePlayerMeta(s.username);
         if (!activeMarketSelection) loadMarketLayout(s.username);
@@ -1456,11 +1478,17 @@
     const isLive = d?.isLive;
     const name = d?.displayName || s.display;
     const ini = initials(name);
+    // Placeholder when there's no stream thumbnail: the streamer's avatar if we
+    // have one, otherwise a generic camera icon.
+    const cameraIconDiv = `<div class="thumb-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10l4.553-2.069A1 1 0 0 1 21 8.82v6.36a1 1 0 0 1-1.447.89L15 14M3 8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z"/></svg></div>`;
+    const placeholderHTML = d?.avatar
+      ? `<div class="thumb-placeholder"><img class="thumb-avatar" src="${d.avatar}" alt=""/></div>`
+      : cameraIconDiv;
     return `<div class="card${loading ? ' loading' : ''}" data-user="${s.username}" onclick="openPlayer('${s.username}')">
       <div class="card-thumb">
         ${d?.thumbnail
-          ? `<img src="${d.thumbnail}" alt="" onerror="this.parentNode.innerHTML='<div class=thumb-placeholder><svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.5\'><path d=\'M15 10l4.553-2.069A1 1 0 0 1 21 8.82v6.36a1 1 0 0 1-1.447.89L15 14M3 8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z\'/></svg></div>'" />`
-          : `<div class="thumb-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10l4.553-2.069A1 1 0 0 1 21 8.82v6.36a1 1 0 0 1-1.447.89L15 14M3 8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z"/></svg></div>`}
+          ? `<img src="${d.thumbnail}" alt="" onerror="this.parentNode.innerHTML='<div class=thumb-placeholder><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'1.5\\'><path d=\\'M15 10l4.553-2.069A1 1 0 0 1 21 8.82v6.36a1 1 0 0 1-1.447.89L15 14M3 8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z\\'/></svg></div>'" />`
+          : placeholderHTML}
         <span class="card-badge ${isLive ? 'badge-live' : 'badge-offline'}">${isLive ? 'LIVE' : 'OFFLINE'}</span>
         ${isLive ? `<div class="card-viewers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>${fv(d.viewers)}</div>` : ''}
         <div class="card-hover-overlay">
