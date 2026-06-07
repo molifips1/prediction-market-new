@@ -814,8 +814,6 @@
 <script>
   const KICK = 'https://kick.com/';
   const WORKER_URL = 'https://blue-unit-891d.apetersen280.workers.dev/'; 
-  // Separate worker that returns only { thumbnail } from Kick v1. Set this after you deploy it.
-  const THUMB_WORKER_URL = 'https://streamslush-thumbs.apetersen280.workers.dev/';
   
   const POLYGON_CHAIN_ID = '0x89'; 
   const CONTRACT_ADDRESS = '0x2B0eE22c992FAFCE4e21B1Fa50b8fEf4D9Cf3342';
@@ -1445,7 +1443,7 @@
         title: d.livestream?.session_title || '',
         viewers: d.livestream?.viewer_count || 0,
         category: d.livestream?.categories?.[0]?.name || d.recent_categories?.[0]?.name || '',
-        thumbnail: pickThumb(d.livestream),  // live thumb if present; separate worker fills the rest
+        thumbnail: null,  // we always show the profile picture on cards, not the stream frame
         avatar: d.user?.profile_pic || null,
         displayName: d.user?.username || username,
       };
@@ -1455,30 +1453,11 @@
     }
   }
 
-  // Separate, optional call: ask the thumbnail worker for a recent stream still.
-  // Failure here never affects live status — it just leaves the placeholder.
-  async function fetchThumb(username) {
-    if (!THUMB_WORKER_URL || THUMB_WORKER_URL.startsWith('PASTE_')) return null;
-    try {
-      const r = await fetch(`${THUMB_WORKER_URL}?user=${encodeURIComponent(username)}`);
-      if (!r.ok) return null;
-      const d = await r.json();
-      return d && d.thumbnail ? d.thumbnail : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
   async function loadAll() {
     render();
     await Promise.all(streamers.map(async s => {
       data[s.username] = await fetchOne(s.username);
       render();
-      // Only bother fetching a thumbnail for live streamers that don't already have one.
-      if (data[s.username]?.isLive && !data[s.username].thumbnail) {
-        const thumb = await fetchThumb(s.username);
-        if (thumb && data[s.username]) { data[s.username].thumbnail = thumb; render(); }
-      }
       if (currentPlayer === s.username) {
         updatePlayerMeta(s.username);
         if (!activeMarketSelection) loadMarketLayout(s.username);
