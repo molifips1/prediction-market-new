@@ -259,6 +259,7 @@
       padding: 24px;
       align-items: flex-start;
     }
+    .market-rules-block { grid-column: 1; }
     
     /* LEFT SIDE: MAIN STAGE STREAM + BRACKETS LIST */
     .player-left-panel {
@@ -608,6 +609,22 @@
       /* Buttons go icon-only to fit the bar */
       .nav-portfolio-btn .btn-label, #wallet-btn-text { display: none; }
       .nav-portfolio-btn, .nav-wallet-btn { padding: 8px 10px; }
+
+      /* Player content: tighter padding, brackets stack to fit the screen */
+      .player-main-content { padding: 16px; gap: 16px; }
+      .bucket-row-item {
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+          "title title"
+          "vol   vol"
+          "yes   no";
+        gap: 8px;
+        padding: 14px 16px;
+      }
+      .bucket-row-title  { grid-area: title; }
+      .bucket-row-volume { grid-area: vol; text-align: left; }
+      .row-bet-btn.yes   { grid-area: yes; }
+      .row-bet-btn.no    { grid-area: no; }
     }
   </style>
 </head>
@@ -729,8 +746,21 @@
           <div class="market-buckets-list-wrapper" id="market-buckets-list">
             </div>
         </div>
+      </div>
 
-        <div style="margin-top: 24px; padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);">
+      <div class="market-right-sticky-panel">
+        <div id="order-slip-container">
+          <div class="order-slip-card">
+            <span class="order-market-title-heading">Viewer Bracket Order Slip</span>
+            <div class="order-empty-state">
+              Select a bracket YES or NO option below the stream to prepare your trade.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="market-rules-block">
+        <div style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);">
           <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px;">
             Market Rules
           </div>
@@ -744,20 +774,9 @@
             <p>
               <strong>Resolution Source:</strong> The sole resolution source for this market is the official channel metrics verified via the platform's automated architecture proxy routing at <code style="color: var(--green-text); background: var(--bg-base); padding: 2px 6px; border-radius: 4px; font-size: 11px;">blue-unit-891d.apetersen280.workers.dev</code>. Alternate tracking sites or personal stream screenshots are not recognized for market settlement.
             </p>
-            <div style="margin-top: 6px; font-size: 11px; color: var(--text-muted); display: flex; gap: 16px;">
-              <span><strong>Oracle Address:</strong> <span style="color: var(--polygon-purple);">0xB4815458f9Ca870a0bbe9d15c2AA33F814fEE7fA</span></span>
+            <div style="margin-top: 6px; font-size: 11px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 16px;">
+              <span><strong>Oracle Address:</strong> <span style="color: var(--polygon-purple); word-break: break-all;">0xB4815458f9Ca870a0bbe9d15c2AA33F814fEE7fA</span></span>
               <span><strong>Collateral asset:</strong> USDC (Polygon)</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="market-right-sticky-panel">
-        <div id="order-slip-container">
-          <div class="order-slip-card">
-            <span class="order-market-title-heading">Viewer Bracket Order Slip</span>
-            <div class="order-empty-state">
-              Select a bracket YES or NO option below the stream to prepare your trade.
             </div>
           </div>
         </div>
