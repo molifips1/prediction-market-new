@@ -922,7 +922,29 @@
   /* WEB3 CONNECTIONS */
   async function executeNativeWalletConnection(walletType) {
     if (!window.ethereum) {
-      toast("Please install a Web3 wallet extension to complete this trade connection.");
+      // On a phone there's no injected wallet in Safari/Chrome — the wallet only
+      // exists inside the wallet app's own browser. Deep-link the user into it.
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobile) {
+        closeWalletPopup();
+        const host = location.host + location.pathname + location.search;
+        let deepLink = null;
+        if (walletType === 'metamask') {
+          deepLink = 'https://metamask.app.link/dapp/' + host;
+        } else if (walletType === 'trust') {
+          deepLink = 'https://link.trustwallet.com/open_url?url=' + encodeURIComponent(location.href);
+        } else if (walletType === 'coinbase') {
+          deepLink = 'https://go.cb-w.com/dapp?cb_url=' + encodeURIComponent(location.href);
+        } else if (walletType === 'phantom') {
+          deepLink = 'https://phantom.app/ul/browse/' + encodeURIComponent(location.href) + '?ref=' + encodeURIComponent(location.origin);
+        }
+        if (deepLink) {
+          toast('Opening in the ' + walletType + ' app…');
+          window.location.href = deepLink;
+          return;
+        }
+      }
+      toast("Open this site inside your wallet app's browser, or install a Web3 wallet extension on desktop.");
       return;
     }
     
