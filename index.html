@@ -337,6 +337,8 @@
       transition: background 0.15s;
     }
     .bucket-row-item:last-child { border-bottom: none; }
+    .bucket-row-item { cursor: pointer; }
+    .bucket-row-item:hover { background: rgba(255,255,255,.03); }
     .bucket-row-item.selected { background: rgba(0, 75, 255, 0.04); }
     
     .bucket-row-title {
@@ -1291,6 +1293,8 @@
         if (volEl)  volEl.textContent  = 'Volume: $' + volUsd.toFixed(2);
         if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes ¢' + yesPrice; yesBtn.onclick = (function(bid,bidx,blabel,price){ return function(){ selectBetSlip(bid,bidx,blabel,'YES',price); }; })(b.id,b.idx,b.label,yesPrice); }
         if (noBtn)  { noBtn.disabled  = false; noBtn.textContent  = 'No ¢'  + noPrice;  noBtn.onclick  = (function(bid,bidx,blabel,price){ return function(){ selectBetSlip(bid,bidx,blabel,'NO', price); }; })(b.id,b.idx,b.label,noPrice); }
+        const rowEl = document.getElementById('card-' + b.id);
+        if (rowEl) rowEl.onclick = (function(bid,bidx,blabel,price){ return function(e){ if (e.target.closest('.row-bet-btn')) return; selectBetSlip(bid,bidx,blabel,'YES',price); }; })(b.id,b.idx,b.label,yesPrice);
       });
 
       applyDefaultSelection(brackets, priceMap, prevSelection);
@@ -1305,6 +1309,8 @@
         if (volEl)  volEl.textContent  = 'Volume: $0.00';
         if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes ¢50'; yesBtn.onclick = (function(bid,bidx,blabel){ return function(){ selectBetSlip(bid,bidx,blabel,'YES',50); }; })(b.id,b.idx,b.label); }
         if (noBtn)  { noBtn.disabled  = false; noBtn.textContent  = 'No ¢50';  noBtn.onclick  = (function(bid,bidx,blabel){ return function(){ selectBetSlip(bid,bidx,blabel,'NO', 50); }; })(b.id,b.idx,b.label); }
+        const rowEl = document.getElementById('card-' + b.id);
+        if (rowEl) rowEl.onclick = (function(bid,bidx,blabel){ return function(e){ if (e.target.closest('.row-bet-btn')) return; selectBetSlip(bid,bidx,blabel,'YES',50); }; })(b.id,b.idx,b.label);
       });
       applyDefaultSelection(brackets, priceMap, prevSelection);
     }
