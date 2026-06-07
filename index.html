@@ -1215,6 +1215,7 @@
   async function loadMarketLayout(username) {
     const container = document.getElementById('market-buckets-list');
     const streamInfo = data[username];
+    const prevSelection = activeMarketSelection;  // preserve across 30s refreshes
     activeMarketSelection = null;
     resetOrderSlipDefault();
 
@@ -1273,6 +1274,7 @@
 
       const totalPot = volResults.reduce(function(a, v) { return a + BigInt(v); }, 0n);
 
+      const priceMap = {};
       brackets.forEach(function(b, i) {
         const rawVol = BigInt(volResults[i]);
         const volUsd = Number(rawVol) / 1e6;
@@ -1282,6 +1284,7 @@
           yesPrice = Math.max(1, Math.min(99, yesPrice));
         }
         const noPrice = 100 - yesPrice;
+        priceMap[b.id] = { yes: yesPrice, no: noPrice, idx: b.idx, label: b.label };
         const volEl  = document.getElementById('vol-'     + b.id);
         const yesBtn = document.getElementById('btn-yes-' + b.id);
         const noBtn  = document.getElementById('btn-no-'  + b.id);
@@ -1289,9 +1292,13 @@
         if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes ¢' + yesPrice; yesBtn.onclick = (function(bid,bidx,blabel,price){ return function(){ selectBetSlip(bid,bidx,blabel,'YES',price); }; })(b.id,b.idx,b.label,yesPrice); }
         if (noBtn)  { noBtn.disabled  = false; noBtn.textContent  = 'No ¢'  + noPrice;  noBtn.onclick  = (function(bid,bidx,blabel,price){ return function(){ selectBetSlip(bid,bidx,blabel,'NO', price); }; })(b.id,b.idx,b.label,noPrice); }
       });
+
+      applyDefaultSelection(brackets, priceMap, prevSelection);
     } catch(e) {
       console.error('Failed to load on-chain market data:', e);
+      const priceMap = {};
       brackets.forEach(function(b) {
+        priceMap[b.id] = { yes: 50, no: 50, idx: b.idx, label: b.label };
         const volEl  = document.getElementById('vol-'     + b.id);
         const yesBtn = document.getElementById('btn-yes-' + b.id);
         const noBtn  = document.getElementById('btn-no-'  + b.id);
@@ -1299,7 +1306,23 @@
         if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes ¢50'; yesBtn.onclick = (function(bid,bidx,blabel){ return function(){ selectBetSlip(bid,bidx,blabel,'YES',50); }; })(b.id,b.idx,b.label); }
         if (noBtn)  { noBtn.disabled  = false; noBtn.textContent  = 'No ¢50';  noBtn.onclick  = (function(bid,bidx,blabel){ return function(){ selectBetSlip(bid,bidx,blabel,'NO', 50); }; })(b.id,b.idx,b.label); }
       });
+      applyDefaultSelection(brackets, priceMap, prevSelection);
     }
+  }
+
+  // Open the slip by default: re-apply the user's prior pick if still valid,
+  // otherwise select the lowest bracket's YES.
+  function applyDefaultSelection(brackets, priceMap, prevSelection) {
+    let target = null;
+    if (prevSelection && priceMap[prevSelection.bucketId]) {
+      const pm = priceMap[prevSelection.bucketId];
+      const price = prevSelection.outcome === 'NO' ? pm.no : pm.yes;
+      target = { id: prevSelection.bucketId, idx: pm.idx, label: pm.label, outcome: prevSelection.outcome, price: price };
+    } else {
+      const first = brackets[0];
+      target = { id: first.id, idx: first.idx, label: first.label, outcome: 'YES', price: priceMap[first.id].yes };
+    }
+    selectBetSlip(target.id, target.idx, target.label, target.outcome, target.price);
   }
 
   function resetOrderSlipDefault() {
