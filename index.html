@@ -95,6 +95,9 @@
     }
     .nav-wallet-btn:hover { background: var(--polygon-purple-hover); }
     .nav-wallet-btn svg { width: 16px; height: 16px; }
+    .nav-wallet-btn.connected { position: relative; background: var(--bg-card); border: 1px solid var(--yes-green); color: var(--text-primary); }
+    .nav-wallet-btn.connected:hover { background: var(--bg-card-hover); }
+    .nav-wallet-btn.connected::after { content: ''; position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--yes-green); box-shadow: 0 0 6px var(--yes-green); border: 2px solid var(--bg-nav); }
     .nav-hamburger { display: none; background: none; border: none; color: var(--text-primary); cursor: pointer; padding: 6px; align-items: center; justify-content: center; flex-shrink: 0; }
     .nav-hamburger svg { width: 24px; height: 24px; }
     .nav-icon-btn { display: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); cursor: pointer; padding: 8px; align-items: center; justify-content: center; }
@@ -250,6 +253,7 @@
       color: #6fb2ff;
     }
     .timeline-badge-pill svg { width: 13px; height: 13px; }
+    .timeline-badge-pill span { white-space: nowrap; }
 
     /* POLYMARKET CORE CONTENT STRUCTURE */
     .player-main-content {
@@ -571,6 +575,10 @@
 
     @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:.8} }
     .card.loading { pointer-events: none; animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+    .skel { display: inline-block; border-radius: 6px; background: linear-gradient(90deg, #1c1e28 25%, #262834 50%, #1c1e28 75%); background-size: 800px 100%; animation: shimmer 1.3s linear infinite; color: transparent !important; }
+    .bucket-row-item.skeleton-row { pointer-events: none; }
+    .bucket-row-item.skeleton-row .row-bet-btn { border-color: transparent !important; }
 
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1c1e28; border: 1px solid var(--border); color: var(--text-primary); font-size: 13px; padding: 10px 20px; border-radius: 20px; z-index: 300; transition: transform .3s ease; pointer-events: none; white-space: nowrap; }
     #toast.show { transform: translateX(-50%) translateY(0); }
@@ -718,7 +726,7 @@
         </div>
         <div class="timeline-badge-pill">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          <span id="timeline-resolution-schedule">Resolving: May 25, 2026</span>
+          <span id="timeline-resolution-schedule">Resolves on the hour ET</span>
         </div>
       </div>
     </div>
@@ -1012,10 +1020,13 @@
 
   function updateWalletUI() {
     const btnText = document.getElementById('wallet-btn-text');
+    const btn = document.getElementById('wallet-btn');
     if (userWalletAddress) {
       btnText.textContent = `${userWalletAddress.slice(0, 6)}...${userWalletAddress.slice(-4)}`;
+      if (btn) btn.classList.add('connected');
     } else {
       btnText.textContent = "Connect Wallet";
+      if (btn) btn.classList.remove('connected');
     }
   }
 
@@ -1198,10 +1209,9 @@
 
       if (resolutionEl) {
         const targetResolutionHour = (now.getHours() + 1) % 24;
+        const ampm = targetResolutionHour >= 12 ? 'PM' : 'AM';
         const displayHour = targetResolutionHour % 12 || 12;
-        
-        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        resolutionEl.textContent = `Resolving: ${monthNames[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()} at ${displayHour}:00 PM ET (Peak count during final minute)`;
+        resolutionEl.textContent = `Resolves ${displayHour}:00 ${ampm} ET`;
       }
     }, 1000);
   }
@@ -1219,12 +1229,12 @@
     const streamInfo = data[username];
     const prevSelection = activeMarketSelection;  // preserve across 30s refreshes
     activeMarketSelection = null;
-    resetOrderSlipDefault();
 
     const isLive = streamInfo?.isLive;
 
     // Hide betting UI entirely if streamer is offline
     if (!isLive) {
+      resetOrderSlipDefault();
       container.innerHTML = '<div class="order-empty-state" style="padding:32px;text-align:center;color:var(--text-muted);">' +
         '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:.4"><circle cx="12" cy="12" r="10"/><line x1="4.93" x2="19.07" y1="4.93" y2="19.07"/></svg>' +
         '<p style="font-size:14px;font-weight:600;margin-bottom:4px;">Streamer Offline</p>' +
@@ -1232,6 +1242,9 @@
         '</div>';
       return;
     }
+
+    // Live: show a shimmer slip while on-chain prices load (no empty-box flash)
+    showOrderSlipLoading();
 
     // Try to read baseViewerCount from chain; fall back to live viewer count
     let baseCount = streamInfo?.viewers || 1500;
@@ -1255,13 +1268,13 @@
       { id: 'b4', idx: 3, label: 'Over ' + fv(Math.round(baseCount * 1.5)) }
     ];
 
-    // Render skeleton rows immediately
+    // Render skeleton rows immediately (shimmer placeholders until volumes load)
     container.innerHTML = brackets.map(function(b) {
-      return '<div class="bucket-row-item" id="card-' + b.id + '">' +
+      return '<div class="bucket-row-item skeleton-row" id="card-' + b.id + '">' +
         '<span class="bucket-row-title">' + b.label + '</span>' +
-        '<span class="bucket-row-volume" id="vol-' + b.id + '">Loading...</span>' +
-        '<button class="row-bet-btn yes" id="btn-yes-' + b.id + '" disabled>Yes ¢--</button>' +
-        '<button class="row-bet-btn no"  id="btn-no-'  + b.id + '" disabled>No ¢--</button>' +
+        '<span class="bucket-row-volume" id="vol-' + b.id + '"><span class="skel" style="width:90px;height:13px;">·</span></span>' +
+        '<button class="row-bet-btn yes" id="btn-yes-' + b.id + '" disabled><span class="skel" style="width:46px;height:14px;">·</span></button>' +
+        '<button class="row-bet-btn no"  id="btn-no-'  + b.id + '" disabled><span class="skel" style="width:46px;height:14px;">·</span></button>' +
         '</div>';
     }).join('');
 
@@ -1294,7 +1307,7 @@
         if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes ¢' + yesPrice; yesBtn.onclick = (function(bid,bidx,blabel,price){ return function(){ selectBetSlip(bid,bidx,blabel,'YES',price); }; })(b.id,b.idx,b.label,yesPrice); }
         if (noBtn)  { noBtn.disabled  = false; noBtn.textContent  = 'No ¢'  + noPrice;  noBtn.onclick  = (function(bid,bidx,blabel,price){ return function(){ selectBetSlip(bid,bidx,blabel,'NO', price); }; })(b.id,b.idx,b.label,noPrice); }
         const rowEl = document.getElementById('card-' + b.id);
-        if (rowEl) rowEl.onclick = (function(bid,bidx,blabel,price){ return function(e){ if (e.target.closest('.row-bet-btn')) return; selectBetSlip(bid,bidx,blabel,'YES',price); }; })(b.id,b.idx,b.label,yesPrice);
+        if (rowEl) { rowEl.classList.remove('skeleton-row'); rowEl.onclick = (function(bid,bidx,blabel,price){ return function(e){ if (e.target.closest('.row-bet-btn')) return; selectBetSlip(bid,bidx,blabel,'YES',price); }; })(b.id,b.idx,b.label,yesPrice); }
       });
 
       applyDefaultSelection(brackets, priceMap, prevSelection);
@@ -1310,7 +1323,7 @@
         if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes ¢50'; yesBtn.onclick = (function(bid,bidx,blabel){ return function(){ selectBetSlip(bid,bidx,blabel,'YES',50); }; })(b.id,b.idx,b.label); }
         if (noBtn)  { noBtn.disabled  = false; noBtn.textContent  = 'No ¢50';  noBtn.onclick  = (function(bid,bidx,blabel){ return function(){ selectBetSlip(bid,bidx,blabel,'NO', 50); }; })(b.id,b.idx,b.label); }
         const rowEl = document.getElementById('card-' + b.id);
-        if (rowEl) rowEl.onclick = (function(bid,bidx,blabel){ return function(e){ if (e.target.closest('.row-bet-btn')) return; selectBetSlip(bid,bidx,blabel,'YES',50); }; })(b.id,b.idx,b.label);
+        if (rowEl) { rowEl.classList.remove('skeleton-row'); rowEl.onclick = (function(bid,bidx,blabel){ return function(e){ if (e.target.closest('.row-bet-btn')) return; selectBetSlip(bid,bidx,blabel,'YES',50); }; })(b.id,b.idx,b.label); }
       });
       applyDefaultSelection(brackets, priceMap, prevSelection);
     }
@@ -1338,6 +1351,21 @@
         <span class="order-market-title-heading">Viewer Bracket Order Slip</span>
         <div class="order-empty-state">
           Select a bracket YES or NO option below the stream to prepare your trade.
+        </div>
+      </div>
+    `;
+  }
+
+  function showOrderSlipLoading() {
+    const slipContainer = document.getElementById('order-slip-container');
+    slipContainer.innerHTML = `
+      <div class="order-slip-card">
+        <span class="order-market-title-heading">Viewer Bracket Order Slip</span>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <span class="skel" style="width:55%;height:16px;">·</span>
+          <span class="skel" style="width:100%;height:40px;border-radius:8px;">·</span>
+          <span class="skel" style="width:100%;height:52px;border-radius:10px;">·</span>
+          <span class="skel" style="width:100%;height:46px;border-radius:10px;">·</span>
         </div>
       </div>
     `;
@@ -1550,10 +1578,27 @@
     const shown = streamers.filter(visible);
     if (shown.length === 0) {
       const isEmpty = streamers.length === 0;
+      const stillLoading = !isEmpty && streamers.some(s => data[s.username] === undefined);
+
+      let title, sub;
+      if (isEmpty) {
+        title = "You're not following anyone yet"; sub = '';
+      } else if (stillLoading) {
+        title = 'Loading streams…'; sub = '';
+      } else if (searchQ) {
+        title = 'No streamers match your search'; sub = 'Try a different name.';
+      } else if (filter === 'live') {
+        title = 'No one you follow is live right now'; sub = 'Check the All or Offline tabs.';
+      } else if (filter === 'offline') {
+        title = 'Everyone you follow is live 🎉'; sub = 'Switch to Live to watch them.';
+      } else {
+        title = 'Nothing to show'; sub = '';
+      }
+
       grid.innerHTML = `<div class="empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <p>${isEmpty ? "You're not following anyone yet" : "No streamers match your filter"}</p>
-        <small>${isEmpty ? 'Try a different filter' : ''}</small>
+        <p>${title}</p>
+        <small>${sub}</small>
       </div>`;
       return;
     }
