@@ -759,7 +759,7 @@
           <div class="order-slip-card">
             <span class="order-market-title-heading">Viewer Bracket Order Slip</span>
             <div class="order-empty-state">
-              Select a bracket YES or NO option below the stream to prepare your trade.
+              Select a viewer bracket below to place your bet.
             </div>
           </div>
         </div>
@@ -838,46 +838,95 @@
 
 <script>
   const KICK = 'https://kick.com/';
-  const WORKER_URL = 'https://blue-unit-891d.apetersen280.workers.dev/'; 
-  
-  const POLYGON_CHAIN_ID = '0x89'; 
-  const CONTRACT_ADDRESS = '0x2B0eE22c992FAFCE4e21B1Fa50b8fEf4D9Cf3342';
-  const USDC_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+  // Oracle worker: serves /markets (streamer -> active market id) and runs the chain.
+  const WORKER_URL = 'https://streamslush-oracle.apetersen280.workers.dev';
 
-  // Core ABIs for interaction loops
+  // ---- Polygon Amoy testnet (chainId 80002 = 0x13882) ----
+  const POLYGON_CHAIN_ID = '0x13882';
+  const CONTRACT_ADDRESS = '0x1E245b9375eD5a0cA00a2294642AE1C2DEF9ccA9'; // verified StreamSlushMarkets (Amoy)
+  const USDC_ADDRESS     = '0xB4815458f9Ca870a0bbe9d15c2AA33F814fEE7fA'; // MockUSDC (Amoy, 6 decimals)
+  const MAX_STAKE_USDC   = 50; // per-wallet stake cap per market (contract enforces 50_000000)
+  const NUM_BRACKETS     = 9;
+  const CHAIN_NUM        = 80002n;
+
+  // Parimutuel market contract (production StreamSlushMarkets) — read + write surface.
   const PREDICTION_MARKET_ABI = [
-    "function placeBet(bytes32, uint256, uint8, uint256, uint256) external",
-    "function claim(bytes32, uint256, uint8) external",
-    "function bracketVolumes(bytes32, uint256, uint8) external view returns (uint256)",
-    "function markets(bytes32, uint256) external view returns (uint256, uint256, bool, uint8, bool, uint256)",
-    "function userBets(bytes32, uint256, address, uint8) external view returns (uint256)",
-    "event BetPlaced(bytes32 indexed, uint256, address, uint8, uint256, uint256)"
+    "function placeBet(uint256 id, uint8 bracket, uint256 amount) external",
+    "function claim(uint256 id) external",
+    "function marketCount() view returns (uint256)",
+    "function getMarket(uint256 id) view returns (uint64 openTime, uint64 settleTime, uint64 claimableAt, uint32 anchorViewers, uint8 status, uint8 winningBracket, uint256 totalPool, uint256 sampleCount)",
+    "function getThresholds(uint256 id) view returns (uint32[8])",
+    "function getBracketPools(uint256 id) view returns (uint256[9])",
+    "function bettingOpen(uint256 id) view returns (bool)",
+    "function previewClaim(uint256 id, address user) view returns (uint256)",
+    "function stakeOf(uint256 id, uint8 bracket, address user) view returns (uint256)",
+    "function totalStakedBy(uint256 id, address user) view returns (uint256)",
+    "function claimed(uint256 id, address user) view returns (bool)",
+    "function maxStakePerMarket() view returns (uint256)",
+    "event BetPlaced(uint256 indexed id, address indexed user, uint8 bracket, uint256 amount)"
   ];
   const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
-    "function allowance(address owner, address spender) external view returns (uint256)"
+    "function allowance(address owner, address spender) external view returns (uint256)",
+    "function balanceOf(address owner) external view returns (uint256)"
   ];
 
-  // Read-only provider — no wallet needed for reads
-  // Multiple fallback RPCs - tries each until one works
-  const POLYGON_RPCS = [
-    'https://polygon-bor-rpc.publicnode.com',
-    'https://polygon.meowrpc.com',
-    'https://polygon.drpc.org',
+  // Market status enum mirrors the contract: Active=0, Settled=1, Voided=2.
+  const MKT = { Active: 0, Settled: 1, Voided: 2 };
+
+  // Read-only provider for Amoy (with fallbacks).
+  const AMOY_RPCS = [
+    'https://rpc-amoy.polygon.technology',
+    'https://polygon-amoy-bor-rpc.publicnode.com',
+    'https://polygon-amoy.drpc.org'
   ];
   async function getWorkingProvider() {
-    for (const rpc of POLYGON_RPCS) {
+    for (const rpc of AMOY_RPCS) {
       try {
-        const p = new ethers.JsonRpcProvider(rpc);
+        const p = new ethers.JsonRpcProvider(rpc, { chainId: 80002, name: 'amoy' });
         await p.getBlockNumber();
         return p;
       } catch(e) { continue; }
     }
-    throw new Error('All RPC endpoints failed');
+    throw new Error('All Amoy RPC endpoints failed');
   }
   async function getReadContract() {
     const provider = await getWorkingProvider();
     return new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, provider);
+  }
+
+  // ---- streamer -> active market id, served by the oracle worker /markets ----
+  // Cached briefly so per-streamer reads don't hammer the worker.
+  let _marketsCache = { ts: 0, data: null };
+  async function getMarketsMap() {
+    const nowMs = Date.now();
+    if (_marketsCache.data && nowMs - _marketsCache.ts < 15000) return _marketsCache.data;
+    try {
+      const res = await fetch(WORKER_URL.replace(/\/$/, '') + '/markets', { cache: 'no-store' });
+      const json = await res.json();
+      _marketsCache = { ts: nowMs, data: json.streamers || {} };
+      return _marketsCache.data;
+    } catch (e) {
+      console.error('failed to fetch /markets', e);
+      return _marketsCache.data || {};
+    }
+  }
+  async function getActiveMarketId(username) {
+    const map = await getMarketsMap();
+    const entry = map[username];
+    if (!entry || entry.activeMarketId == null) return null;
+    return entry.activeMarketId;
+  }
+
+  // Build the 9 viewer-range bracket labels from the 8 on-chain thresholds.
+  // bracket 0: "< t0", bracket i: "t(i-1) – t(i)", bracket 8: ">= t7".
+  function bracketLabelsFromThresholds(thr) {
+    const t = thr.map(x => Number(x));
+    const labels = [];
+    labels.push('< ' + fv(t[0]));
+    for (let i = 1; i < 8; i++) labels.push(fv(t[i-1]) + ' – ' + fv(t[i]));
+    labels.push('≥ ' + fv(t[7]));
+    return labels;
   }
 
 
@@ -970,9 +1019,9 @@
       activeEthersProviderInstance = new ethers.BrowserProvider(selectedActiveWalletProvider);
       
       const walletNetwork = await activeEthersProviderInstance.getNetwork();
-      if (walletNetwork.chainId !== 137n) {
+      if (walletNetwork.chainId !== CHAIN_NUM) {
         try {
-          toast("Switching active network target parameters to Polygon Mainnet...");
+          toast("Switching network to Polygon Amoy testnet...");
           await selectedActiveWalletProvider.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: POLYGON_CHAIN_ID }],
@@ -983,10 +1032,10 @@
               method: 'wallet_addEthereumChain',
               params: [{
                 chainId: POLYGON_CHAIN_ID,
-                chainName: 'Polygon Mainnet',
+                chainName: 'Polygon Amoy Testnet',
                 nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
-                rpcUrls: ['https://polygon-rpc.com/'],
-                blockExplorerUrls: ['https://polygonscan.com/']
+                rpcUrls: ['https://rpc-amoy.polygon.technology'],
+                blockExplorerUrls: ['https://amoy.polygonscan.com/']
               }],
             });
           } else {
@@ -999,13 +1048,7 @@
       updateWalletUI();
       renderPortfolioRows();
       if (activeMarketSelection) {
-        selectBetSlip(
-          activeMarketSelection.bucketId, 
-          activeMarketSelection.numericIdx, 
-          activeMarketSelection.label, 
-          activeMarketSelection.outcome, 
-          activeMarketSelection.pricePerShare
-        );
+        selectBetSlip(activeMarketSelection.bucketId, activeMarketSelection.numericIdx, activeMarketSelection.label);
       }
       toast("Wallet Connected Successfully! 🎉");
     } catch (err) {
@@ -1040,13 +1083,7 @@
       updateWalletUI();
       renderPortfolioRows();
       if (activeMarketSelection) {
-        selectBetSlip(
-          activeMarketSelection.bucketId, 
-          activeMarketSelection.numericIdx, 
-          activeMarketSelection.label, 
-          activeMarketSelection.outcome, 
-          activeMarketSelection.pricePerShare
-        );
+        selectBetSlip(activeMarketSelection.bucketId, activeMarketSelection.numericIdx, activeMarketSelection.label);
       }
     });
     targetedListener.on('chainChanged', () => window.location.reload());
@@ -1077,117 +1114,106 @@
 
     try {
       const contract = await getReadContract();
-      const endTime  = getMarketTargetEndTime();
+      const provider = await getWorkingProvider();
 
-      // Query BetPlaced events in chunks of 9000 blocks (RPC limit is 10000)
-      const filter = contract.filters.BetPlaced();
-      const latestBlock = await (await getWorkingProvider()).getBlockNumber();
+      // Find the market ids this wallet has bet in, via BetPlaced events.
+      const filter = contract.filters.BetPlaced(null, userWalletAddress);
+      const latestBlock = await provider.getBlockNumber();
       const CHUNK = 9000;
-      const LOOK_BACK = 90000; // ~5 days on Polygon
+      const LOOK_BACK = 90000;
       const fromBlock = Math.max(0, latestBlock - LOOK_BACK);
-      let allEvents = [];
+      let events = [];
       for (let from = fromBlock; from <= latestBlock; from += CHUNK) {
         const to = Math.min(from + CHUNK - 1, latestBlock);
-        try {
-          const chunk = await contract.queryFilter(filter, from, to);
-          allEvents = allEvents.concat(chunk);
-        } catch(e) { console.warn('chunk failed', from, to, e); }
+        try { events = events.concat(await contract.queryFilter(filter, from, to)); }
+        catch (e) { console.warn('chunk failed', from, to, e); }
       }
-      const events = allEvents.filter(function(ev) {
-        return ev.args.user.toLowerCase() === userWalletAddress.toLowerCase();
-      });
 
       if (events.length === 0) {
         container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>No bets placed yet.</p></div>';
         return;
       }
 
-      // Deduplicate by streamer+timestamp+bracketId — keep latest amount
-      const posMap = {};
-      for (const ev of events) {
-        const key = ev.args.streamer + '_' + ev.args.timestamp.toString() + '_' + ev.args.bracketId.toString();
-        posMap[key] = ev.args;
-      }
+      // Distinct market ids.
+      const ids = Array.from(new Set(events.map(ev => ev.args.id.toString())));
 
-      const rows = await Promise.all(Object.values(posMap).map(async function(args) {
-        const streamerBytes32 = args.streamer;
-        const ts = args.timestamp;
-        const bracketId = Number(args.bracketId);
-        const nowUnix = Math.floor(Date.now() / 1000);
-        const isExpired = nowUnix > Number(ts);
+      const rows = await Promise.all(ids.map(async function(id) {
+        let mkt, claimable, staked, alreadyClaimed, thresholds;
+        try {
+          [mkt, claimable, staked, alreadyClaimed, thresholds] = await Promise.all([
+            contract.getMarket(id),
+            contract.previewClaim(id, userWalletAddress).catch(() => 0n),
+            contract.totalStakedBy(id, userWalletAddress).catch(() => 0n),
+            contract.claimed(id, userWalletAddress).catch(() => false),
+            contract.getThresholds(id).catch(() => null)
+          ]);
+        } catch (e) { return ''; }
 
-        // Get current user bet amount
-        const betAmt = await contract.userBets(streamerBytes32, ts, userWalletAddress, bracketId).catch(function() { return 0n; });
-        const betUsd = (Number(betAmt) / 1e6).toFixed(2);
+        const status = Number(mkt.status);
+        const stakedUsd = (Number(staked) / 1e6).toFixed(2);
+        const claimableUsd = (Number(claimable) / 1e6).toFixed(2);
+        const labels = thresholds ? bracketLabelsFromThresholds(thresholds) : null;
+        const winLabel = (status === MKT.Settled && labels) ? labels[Number(mkt.winningBracket)] : null;
 
-        // Get market state
-        const market = await contract.markets(streamerBytes32, ts).catch(function() { return null; });
-        const isResolved = market ? market.resolved : false;
-        const isClaimed  = betAmt === 0n && isExpired;
+        let statusText, statusColor;
+        if (status === MKT.Active)       { statusText = 'Active'; statusColor = 'var(--text-secondary)'; }
+        else if (status === MKT.Settled) { statusText = 'Resolved' + (winLabel ? ' · ' + winLabel : ''); statusColor = 'var(--green-text)'; }
+        else                             { statusText = 'Voided (refundable)'; statusColor = '#f5a623'; }
 
-        // Decode streamer name
-        let streamerName = streamerBytes32;
-        try { streamerName = ethers.decodeBytes32String(streamerBytes32); } catch(e) {}
+        const canClaim = !alreadyClaimed && claimable > 0n && (status === MKT.Settled || status === MKT.Voided);
+        const claimBtn = alreadyClaimed
+          ? '<button class="claim-btn" disabled>Claimed</button>'
+          : (canClaim
+              ? '<button class="claim-btn" data-id="' + id + '" onclick="claimOnChainBtn(this)">Claim $' + claimableUsd + '</button>'
+              : '<button class="claim-btn" disabled>' + (status === MKT.Active ? 'In play' : 'Nothing to claim') + '</button>');
 
-        const bracketLabels = ['Under threshold','Low bracket','Mid bracket','High bracket'];
-        const bracketLabel  = bracketLabels[bracketId] || ('Bracket ' + bracketId);
-
-        const statusText  = isClaimed ? 'Claimed' : (isResolved ? 'Resolved' : (isExpired ? 'Awaiting Resolution' : 'Active Trading'));
-        const statusColor = isClaimed ? 'var(--text-muted)' : (isResolved ? 'var(--green-text)' : (isExpired ? '#f5a623' : 'var(--text-secondary)'));
-
-        const canClaim = isResolved && betAmt > 0n;
-
-        const claimData = 'data-s="' + streamerBytes32 + '" data-t="' + ts.toString() + '" data-b="' + bracketId + '"';
-        const claimBtn = canClaim
-          ? '<button class="claim-btn" ' + claimData + ' onclick="claimOnChainBtn(this)">Claim Payout</button>'
-          : '<button class="claim-btn" disabled>Locked</button>';
         return '<div class="portfolio-data-row">' +
-          '<span style="font-weight:600;color:#fff;">' + streamerName + ' Market</span>' +
-          '<span>' + bracketLabel + ' <b style="color:var(--yes-green)">YES</b></span>' +
-          '<span>$' + betUsd + ' USDC</span>' +
+          '<span style="font-weight:600;color:#fff;">Market #' + id + '</span>' +
+          '<span>Staked $' + stakedUsd + ' USDC</span>' +
+          '<span>' + (canClaim ? 'Claimable $' + claimableUsd : '—') + '</span>' +
           '<span style="color:' + statusColor + ';font-weight:500;">' + statusText + '</span>' +
           '<div style="text-align:right;">' + claimBtn + '</div>' +
         '</div>';
       }));
 
-      container.innerHTML = rows.join('');
-    } catch(e) {
+      const html = rows.filter(Boolean).join('');
+      container.innerHTML = html || '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>No bets placed yet.</p></div>';
+    } catch (e) {
       console.error('Portfolio load error:', e);
       container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>Could not load positions. Check console.</p></div>';
     }
   }
 
   function claimOnChainBtn(btn) {
-    const s = btn.getAttribute('data-s');
-    const t = BigInt(btn.getAttribute('data-t'));
-    const b = parseInt(btn.getAttribute('data-b'));
-    claimOnChain(s, t, b);
+    claimOnChain(btn.getAttribute('data-id'));
   }
 
-  async function claimOnChain(streamerBytes32, timestamp, bracketId) {
+  async function claimOnChain(marketId) {
     if (!userWalletAddress) { connectWallet(); return; }
     try {
-      toast('Connecting to execution pipeline...');
       const finalProvider = activeEthersProviderInstance || new ethers.BrowserProvider(window.ethereum);
       const signer = await finalProvider.getSigner();
       const marketInstance = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
-      toast('Submitting claim transaction on-chain...');
-      const tx = await marketInstance.claim(streamerBytes32, timestamp, bracketId);
-      toast('Awaiting block confirmation...');
+      toast('Submitting claim...');
+      const tx = await marketInstance.claim(marketId);
       await tx.wait(1);
-      toast('Payout successfully claimed! 💰');
+      toast('Payout claimed! 💰');
       renderPortfolioRows();
-    } catch(err) {
+    } catch (err) {
       console.error(err);
-      toast('Claim failed or already processed.');
+      const msg = (err && (err.shortMessage || err.message)) || '';
+      if (msg.includes('not resolved')) toast('Market not resolved yet.');
+      else if (msg.includes('nothing')) toast('Nothing to claim on this market.');
+      else if (msg.includes('locked') || msg.includes('challenge')) toast('Winnings still in the challenge window.');
+      else toast('Claim failed or already processed.');
     }
   }
 
   /* TRACK AND COMPUTE CLOCK INTERVAL TIMELINES OVER DESIGNATED TARGETS */
   function startTimelineClocks() {
     if (clockIntervalTimer) clearInterval(clockIntervalTimer);
-    
-    // Refresh on-chain volumes every 30s
+
+    // Refresh on-chain pools every 30s
     if (window._volumeRefreshTimer) clearInterval(window._volumeRefreshTimer);
     window._volumeRefreshTimer = setInterval(function() {
       if (currentPlayer) loadMarketLayout(currentPlayer);
@@ -1196,152 +1222,177 @@
     clockIntervalTimer = setInterval(() => {
       if (!currentPlayer) return;
 
-      const now = new Date();
-      const targetMin = 59 - now.getMinutes();
-      const targetSec = 59 - now.getSeconds();
-
       const clockEl = document.getElementById('timeline-clock-countdown');
       const resolutionEl = document.getElementById('timeline-resolution-schedule');
+      const m = window._currentMarket;
 
-      if (clockEl) {
-        clockEl.textContent = `${String(targetMin).padStart(2, '0')}m ${String(targetSec).padStart(2, '0')}s left to trade`;
+      if (!m) {
+        if (clockEl) clockEl.textContent = 'No active market';
+        if (resolutionEl) resolutionEl.textContent = '';
+        return;
       }
 
-      if (resolutionEl) {
-        const targetResolutionHour = (now.getHours() + 1) % 24;
-        const ampm = targetResolutionHour >= 12 ? 'PM' : 'AM';
-        const displayHour = targetResolutionHour % 12 || 12;
-        resolutionEl.textContent = `Resolves ${displayHour}:00 ${ampm} ET`;
+      const now = Math.floor(Date.now() / 1000);
+      // Betting closes 40 min after open (BETTING_CLOSE_OFFSET); settle at settleTime.
+      const bettingClose = (m.openTime || 0) + 40 * 60;
+      const settleTime = m.settleTime || 0;
+
+      function fmt(secs) {
+        if (secs < 0) secs = 0;
+        const mm = Math.floor(secs / 60);
+        const ss = secs % 60;
+        return String(mm).padStart(2, '0') + 'm ' + String(ss).padStart(2, '0') + 's';
+      }
+
+      if (m.status === MKT.Settled) {
+        if (clockEl) clockEl.textContent = 'Market resolved';
+        if (resolutionEl) resolutionEl.textContent = 'Winning bracket: ' + ((m.labels && m.labels[m.winningBracket]) || '?');
+      } else if (m.status === MKT.Voided) {
+        if (clockEl) clockEl.textContent = 'Market voided';
+        if (resolutionEl) resolutionEl.textContent = 'Stakes refundable from Portfolio';
+      } else if (now < bettingClose) {
+        if (clockEl) clockEl.textContent = fmt(bettingClose - now) + ' left to bet';
+        if (resolutionEl) resolutionEl.textContent = 'Settles in ' + fmt(settleTime - now);
+      } else if (now < settleTime) {
+        if (clockEl) clockEl.textContent = 'Betting closed';
+        if (resolutionEl) resolutionEl.textContent = 'Sampling viewers · settles in ' + fmt(settleTime - now);
+      } else {
+        if (clockEl) clockEl.textContent = 'Settling…';
+        if (resolutionEl) resolutionEl.textContent = 'Awaiting on-chain settlement';
       }
     }, 1000);
   }
 
-  /* GET TARGET UNIX ENDTIME */
-  function getMarketTargetEndTime() {
-    const d = new Date();
-    d.setHours(d.getHours() + 1, 0, 0, 0);
-    return Math.floor(d.getTime() / 1000);
-  }
+  /* (legacy hourly-target helper retained as no-op for safety) */
+  function getMarketTargetEndTime() { return Math.floor(Date.now() / 1000); }
 
   /* RE-RENDER STACKED LIST BRACKETS — reads live volumes + baseViewerCount from chain */
   async function loadMarketLayout(username) {
     const container = document.getElementById('market-buckets-list');
     const streamInfo = data[username];
-    const prevSelection = activeMarketSelection;  // preserve across 30s refreshes
+    const prevSelection = activeMarketSelection;  // preserve across refreshes
     activeMarketSelection = null;
 
     const isLive = streamInfo?.isLive;
 
-    // Hide betting UI entirely if streamer is offline
-    if (!isLive) {
+    // Resolve the on-chain market id for this streamer from the oracle worker.
+    const marketId = await getActiveMarketId(username);
+
+    // No active market (offline, warming up, or between cycles) -> info state.
+    if (!isLive || marketId == null) {
       resetOrderSlipDefault();
+      const msg = !isLive
+        ? { t: 'Streamer Offline', s: 'Markets are only available while the streamer is live.' }
+        : { t: 'No Active Market', s: 'A new viewer-bracket market opens shortly after the stream goes live.' };
       container.innerHTML = '<div class="order-empty-state" style="padding:32px;text-align:center;color:var(--text-muted);">' +
         '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:.4"><circle cx="12" cy="12" r="10"/><line x1="4.93" x2="19.07" y1="4.93" y2="19.07"/></svg>' +
-        '<p style="font-size:14px;font-weight:600;margin-bottom:4px;">Streamer Offline</p>' +
-        '<p style="font-size:12px;">Prediction markets are only available while the streamer is live.</p>' +
+        '<p style="font-size:14px;font-weight:600;margin-bottom:4px;">' + msg.t + '</p>' +
+        '<p style="font-size:12px;">' + msg.s + '</p>' +
         '</div>';
       return;
     }
 
-    // Live: show a shimmer slip while on-chain prices load (no empty-box flash)
     showOrderSlipLoading();
 
-    // Try to read baseViewerCount from chain; fall back to live viewer count
-    let baseCount = streamInfo?.viewers || 1500;
+    let mkt, thresholds, pools, bettingOpen;
     try {
       const rc = await getReadContract();
-      const streamerBytes32 = ethers.encodeBytes32String(username);
-      const endTime = getMarketTargetEndTime();
-      const marketData = await rc.markets(streamerBytes32, endTime);
-      if (marketData.active && Number(marketData.baseViewerCount) > 0) {
-        baseCount = Number(marketData.baseViewerCount);
+      [mkt, thresholds, pools, bettingOpen] = await Promise.all([
+        rc.getMarket(marketId),
+        rc.getThresholds(marketId),
+        rc.getBracketPools(marketId),
+        rc.bettingOpen(marketId).catch(() => false)
+      ]);
+    } catch (e) {
+      console.error('Failed to read market', marketId, e);
+      container.innerHTML = '<div class="order-empty-state" style="padding:32px;text-align:center;color:var(--text-muted);">Could not load market data. Retrying shortly…</div>';
+      return;
+    }
+
+    const status = Number(mkt.status);
+    const anchor = Number(mkt.anchorViewers);
+    const labels = bracketLabelsFromThresholds(thresholds);
+    const poolUsd = pools.map(p => Number(p) / 1e6);
+    const totalPoolUsd = poolUsd.reduce((a, v) => a + v, 0);
+
+    // Remember context for the bet slip / submit.
+    window._currentPools = poolUsd;
+    window._currentMarket = {
+      id: String(marketId), anchor, labels,
+      bettingOpen: !!bettingOpen, status,
+      settleTime: Number(mkt.settleTime), openTime: Number(mkt.openTime),
+      winningBracket: Number(mkt.winningBracket)
+    };
+
+    // If betting has closed (sampling / settle / resolved), show a status banner
+    // instead of bet buttons — markets are read-only past the betting window.
+    if (!bettingOpen || status !== MKT.Active) {
+      let banner;
+      if (status === MKT.Settled) {
+        banner = 'Market resolved — winning bracket: <b>' + (labels[Number(mkt.winningBracket)] || '?') + '</b>';
+      } else if (status === MKT.Voided) {
+        banner = 'Market voided — all stakes are refundable from your Portfolio.';
+      } else {
+        banner = 'Betting is closed for this market. Sampling viewer counts, settling soon.';
       }
-    } catch(e) { /* use live viewer count as fallback */ }
+      resetOrderSlipDefault();
+      container.innerHTML =
+        '<div style="padding:12px 14px;margin-bottom:10px;border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:13px;">' + banner + '</div>' +
+        labels.map(function(lab, i) {
+          return '<div class="bucket-row-item" id="card-b' + i + '">' +
+            '<span class="bucket-row-title">' + lab + (i === window._currentMarket.winningBracket && status === MKT.Settled ? ' ✓' : '') + '</span>' +
+            '<span class="bucket-row-volume">Pool: $' + poolUsd[i].toFixed(2) + '</span>' +
+            '</div>';
+        }).join('');
+      return;
+    }
 
-    // Store for use when submitting a bet
-    window._currentMarketBaseViewers = baseCount;
-
-    const brackets = [
-      { id: 'b1', idx: 0, label: 'Under ' + fv(Math.round(baseCount * 0.7)) },
-      { id: 'b2', idx: 1, label: fv(Math.round(baseCount * 0.7)) + ' – ' + fv(Math.round(baseCount * 1.1)) },
-      { id: 'b3', idx: 2, label: fv(Math.round(baseCount * 1.1)) + ' – ' + fv(Math.round(baseCount * 1.5)) },
-      { id: 'b4', idx: 3, label: 'Over ' + fv(Math.round(baseCount * 1.5)) }
-    ];
-
-    // Render skeleton rows immediately (shimmer placeholders until volumes load)
-    container.innerHTML = brackets.map(function(b) {
-      return '<div class="bucket-row-item skeleton-row" id="card-' + b.id + '">' +
-        '<span class="bucket-row-title">' + b.label + '</span>' +
-        '<span class="bucket-row-volume" id="vol-' + b.id + '"><span class="skel" style="width:90px;height:13px;">·</span></span>' +
-        '<button class="row-bet-btn yes" id="btn-yes-' + b.id + '" disabled><span class="skel" style="width:46px;height:14px;">·</span></button>' +
-        '<button class="row-bet-btn no"  id="btn-no-'  + b.id + '" disabled><span class="skel" style="width:46px;height:14px;">·</span></button>' +
+    // Active + betting open: render 9 parimutuel bracket rows with pool + odds.
+    container.innerHTML = labels.map(function(lab, i) {
+      return '<div class="bucket-row-item skeleton-row" id="card-b' + i + '">' +
+        '<span class="bucket-row-title">' + lab + '</span>' +
+        '<span class="bucket-row-volume" id="vol-b' + i + '"><span class="skel" style="width:90px;height:13px;">·</span></span>' +
+        '<button class="row-bet-btn yes" id="btn-bet-b' + i + '" disabled><span class="skel" style="width:46px;height:14px;">·</span></button>' +
         '</div>';
     }).join('');
 
-    try {
-      const contract = await getReadContract();
-      const streamerBytes32b = ethers.encodeBytes32String(username);
-      const endTime = getMarketTargetEndTime();
+    const infoMap = {};
+    labels.forEach(function(lab, i) {
+      const share = totalPoolUsd > 0 ? (poolUsd[i] / totalPoolUsd) : 0;
+      // Parimutuel "odds": if this bracket wins, payout multiple ≈ totalPool / bracketPool
+      // (minus the 2% fee). Shown as e.g. "2.4x". If empty, show "—".
+      const mult = poolUsd[i] > 0 ? (totalPoolUsd / poolUsd[i]) * 0.98 : 0;
+      infoMap['b' + i] = { idx: i, label: lab, poolUsd: poolUsd[i], mult: mult };
+      const volEl = document.getElementById('vol-b' + i);
+      const betBtn = document.getElementById('btn-bet-b' + i);
+      if (volEl) volEl.textContent = 'Pool: $' + poolUsd[i].toFixed(2) + (mult > 0 ? '  ·  ' + mult.toFixed(2) + 'x' : '');
+      if (betBtn) {
+        betBtn.disabled = false;
+        betBtn.textContent = 'Bet';
+        betBtn.onclick = (function(bid, bidx, blabel){ return function(){ selectBetSlip(bid, bidx, blabel); }; })('b' + i, i, lab);
+      }
+      const rowEl = document.getElementById('card-b' + i);
+      if (rowEl) {
+        rowEl.classList.remove('skeleton-row');
+        rowEl.onclick = (function(bid, bidx, blabel){ return function(e){ if (e.target.closest('.row-bet-btn')) return; selectBetSlip(bid, bidx, blabel); }; })('b' + i, i, lab);
+      }
+    });
 
-      const volResults = await Promise.all(
-        brackets.map(function(b) { return contract.bracketVolumes(streamerBytes32b, endTime, b.idx).catch(function() { return 0n; }); })
-      );
-
-      const totalPot = volResults.reduce(function(a, v) { return a + BigInt(v); }, 0n);
-
-      const priceMap = {};
-      brackets.forEach(function(b, i) {
-        const rawVol = BigInt(volResults[i]);
-        const volUsd = Number(rawVol) / 1e6;
-        let yesPrice = 50;
-        if (totalPot > 0n) {
-          yesPrice = Math.round((Number(rawVol) / Number(totalPot)) * 100);
-          yesPrice = Math.max(1, Math.min(99, yesPrice));
-        }
-        const noPrice = 100 - yesPrice;
-        priceMap[b.id] = { yes: yesPrice, no: noPrice, idx: b.idx, label: b.label };
-        const volEl  = document.getElementById('vol-'     + b.id);
-        const yesBtn = document.getElementById('btn-yes-' + b.id);
-        const noBtn  = document.getElementById('btn-no-'  + b.id);
-        if (volEl)  volEl.textContent  = 'Volume: $' + volUsd.toFixed(2);
-        if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes ¢' + yesPrice; yesBtn.onclick = (function(bid,bidx,blabel,price){ return function(){ selectBetSlip(bid,bidx,blabel,'YES',price); }; })(b.id,b.idx,b.label,yesPrice); }
-        if (noBtn)  { noBtn.disabled  = false; noBtn.textContent  = 'No ¢'  + noPrice;  noBtn.onclick  = (function(bid,bidx,blabel,price){ return function(){ selectBetSlip(bid,bidx,blabel,'NO', price); }; })(b.id,b.idx,b.label,noPrice); }
-        const rowEl = document.getElementById('card-' + b.id);
-        if (rowEl) { rowEl.classList.remove('skeleton-row'); rowEl.onclick = (function(bid,bidx,blabel,price){ return function(e){ if (e.target.closest('.row-bet-btn')) return; selectBetSlip(bid,bidx,blabel,'YES',price); }; })(b.id,b.idx,b.label,yesPrice); }
-      });
-
-      applyDefaultSelection(brackets, priceMap, prevSelection);
-    } catch(e) {
-      console.error('Failed to load on-chain market data:', e);
-      const priceMap = {};
-      brackets.forEach(function(b) {
-        priceMap[b.id] = { yes: 50, no: 50, idx: b.idx, label: b.label };
-        const volEl  = document.getElementById('vol-'     + b.id);
-        const yesBtn = document.getElementById('btn-yes-' + b.id);
-        const noBtn  = document.getElementById('btn-no-'  + b.id);
-        if (volEl)  volEl.textContent  = 'Volume: $0.00';
-        if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes ¢50'; yesBtn.onclick = (function(bid,bidx,blabel){ return function(){ selectBetSlip(bid,bidx,blabel,'YES',50); }; })(b.id,b.idx,b.label); }
-        if (noBtn)  { noBtn.disabled  = false; noBtn.textContent  = 'No ¢50';  noBtn.onclick  = (function(bid,bidx,blabel){ return function(){ selectBetSlip(bid,bidx,blabel,'NO', 50); }; })(b.id,b.idx,b.label); }
-        const rowEl = document.getElementById('card-' + b.id);
-        if (rowEl) { rowEl.classList.remove('skeleton-row'); rowEl.onclick = (function(bid,bidx,blabel){ return function(e){ if (e.target.closest('.row-bet-btn')) return; selectBetSlip(bid,bidx,blabel,'YES',50); }; })(b.id,b.idx,b.label); }
-      });
-      applyDefaultSelection(brackets, priceMap, prevSelection);
-    }
+    applyDefaultSelection(labels.map((lab, i) => ({ id: 'b' + i, idx: i, label: lab })), infoMap, prevSelection);
   }
 
-  // Open the slip by default: re-apply the user's prior pick if still valid,
-  // otherwise select the lowest bracket's YES.
-  function applyDefaultSelection(brackets, priceMap, prevSelection) {
+  // Re-apply the user's prior pick if still valid, else select the bracket
+  // nearest the anchor (the center band, most intuitive default).
+  function applyDefaultSelection(brackets, infoMap, prevSelection) {
     let target = null;
-    if (prevSelection && priceMap[prevSelection.bucketId]) {
-      const pm = priceMap[prevSelection.bucketId];
-      const price = prevSelection.outcome === 'NO' ? pm.no : pm.yes;
-      target = { id: prevSelection.bucketId, idx: pm.idx, label: pm.label, outcome: prevSelection.outcome, price: price };
+    if (prevSelection && infoMap[prevSelection.bucketId]) {
+      const pm = infoMap[prevSelection.bucketId];
+      target = { id: prevSelection.bucketId, idx: pm.idx, label: pm.label };
     } else {
-      const first = brackets[0];
-      target = { id: first.id, idx: first.idx, label: first.label, outcome: 'YES', price: priceMap[first.id].yes };
+      const center = brackets[4] || brackets[0];
+      target = { id: center.id, idx: center.idx, label: center.label };
     }
-    selectBetSlip(target.id, target.idx, target.label, target.outcome, target.price);
+    selectBetSlip(target.id, target.idx, target.label);
   }
 
   function resetOrderSlipDefault() {
@@ -1350,7 +1401,7 @@
       <div class="order-slip-card">
         <span class="order-market-title-heading">Viewer Bracket Order Slip</span>
         <div class="order-empty-state">
-          Select a bracket YES or NO option below the stream to prepare your trade.
+          Select a viewer bracket below to place your bet.
         </div>
       </div>
     `;
@@ -1372,63 +1423,62 @@
   }
 
   /* INJECT SELECTION INTO RIGHT-SIDE POLYMARKET MODAL */
-  function selectBetSlip(bucketId, numericIdx, label, outcome, pricePerShare) {
-    activeMarketSelection = { bucketId, numericIdx, label, outcome, pricePerShare };
+  function selectBetSlip(bucketId, numericIdx, label) {
+    activeMarketSelection = { bucketId, numericIdx, label };
 
     document.querySelectorAll('.bucket-row-item').forEach(el => el.classList.remove('selected'));
     document.querySelectorAll('.row-bet-btn').forEach(el => el.classList.remove('active'));
-
-    document.getElementById(`card-${bucketId}`).classList.add('selected');
-    if (outcome === 'YES') {
-      document.getElementById(`btn-yes-${bucketId}`).classList.add('active');
-    } else {
-      document.getElementById(`btn-no-${bucketId}`).classList.add('active');
-    }
+    const card = document.getElementById(`card-${bucketId}`);
+    if (card) card.classList.add('selected');
+    const betBtn = document.getElementById(`btn-bet-${bucketId}`);
+    if (betBtn) betBtn.classList.add('active');
 
     const slipContainer = document.getElementById('order-slip-container');
     slipContainer.innerHTML = `
       <div class="order-slip-card">
         <div style="display:flex; flex-direction:column; gap:4px;">
-          <span class="order-slip-sub-label">Market Option</span>
+          <span class="order-slip-sub-label">Predicted viewer bracket</span>
           <span class="order-market-title-heading">${label}</span>
-        </div>
-        
-        <div class="order-slip-tabs">
-          <button class="order-tab ${outcome === 'YES' ? 'yes-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', ${numericIdx}, '${label}', 'YES', 50)">Buy Yes</button>
-          <button class="order-tab ${outcome === 'NO' ? 'no-active' : 'inactive'}" onclick="selectBetSlip('${bucketId}', ${numericIdx}, '${label}', 'NO', 50)">Buy No</button>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:6px;">
-          <span class="order-slip-sub-label">Amount</span>
+          <span class="order-slip-sub-label">Stake (USDC)</span>
           <div class="order-input-container">
-            <input type="number" id="order-amount-input" value="10" min="1" placeholder="0" oninput="calculateShares()">
+            <input type="number" id="order-amount-input" value="10" min="1" max="${MAX_STAKE_USDC}" placeholder="0" oninput="calculateShares()">
             <span class="order-currency-label">USDC</span>
           </div>
+          <span class="order-slip-sub-label" style="font-size:11px;opacity:.7;">Max ${MAX_STAKE_USDC} USDC per market (per wallet)</span>
         </div>
 
         <div class="order-quick-amounts">
-          <button class="quick-amt-btn" onclick="addOrderAmount(1)">+$1</button>
-          <button class="quick-amt-btn" onclick="addOrderAmount(5)">+$5</button>
-          <button class="quick-amt-btn" onclick="addOrderAmount(10)">+$10</button>
-          <button class="quick-amt-btn" onclick="addOrderAmount(100)">+$100</button>
+          <button class="quick-amt-btn" onclick="addOrderAmount(1)">+1</button>
+          <button class="quick-amt-btn" onclick="addOrderAmount(5)">+5</button>
+          <button class="quick-amt-btn" onclick="addOrderAmount(10)">+10</button>
+          <button class="quick-amt-btn" onclick="setOrderAmount(${MAX_STAKE_USDC})">Max</button>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:8px; margin-top:4px; padding-top:12px; border-top:1px solid var(--border);">
           <div class="order-summary-row">
-            <span>Avg. Price</span>
-            <span class="order-summary-value">¢${pricePerShare}</span>
+            <span>If this bracket wins, est. payout</span>
+            <span class="order-summary-value" id="est-payout-val">—</span>
           </div>
           <div class="order-summary-row">
-            <span>Est. Shares Received</span>
-            <span class="order-summary-value" id="est-shares-val">20.00</span>
+            <span style="font-size:11px;opacity:.7;">Parimutuel: winners split the whole pool (minus 2% fee), pro-rata to stake. Payout is an estimate from the current pool and moves as others bet.</span>
           </div>
         </div>
 
         <button class="trade-submit-btn" onclick="submitFinalBet()">
-          ${userWalletAddress ? 'Submit Trade' : 'Connect Wallet to Trade'}
+          ${userWalletAddress ? 'Place Bet' : 'Connect Wallet to Bet'}
         </button>
       </div>
     `;
+    calculateShares();
+  }
+
+  function setOrderAmount(val) {
+    const input = document.getElementById('order-amount-input');
+    if (!input) return;
+    input.value = val;
     calculateShares();
   }
 
@@ -1436,72 +1486,91 @@
     const input = document.getElementById('order-amount-input');
     if (!input) return;
     const current = parseFloat(input.value) || 0;
-    input.value = current + val;
+    let next = current + val;
+    if (next > MAX_STAKE_USDC) next = MAX_STAKE_USDC;
+    input.value = next;
     calculateShares();
   }
 
+  // Estimate parimutuel payout: stake's pro-rata share of (totalPool + stake)
+  // if this bracket wins, minus the 2% fee. Purely indicative.
   function calculateShares() {
     if (!activeMarketSelection) return;
     const inputEl = document.getElementById('order-amount-input');
-    const usdAmount = inputEl ? (parseFloat(inputEl.value) || 0) : 0;
-    const priceCents = activeMarketSelection.pricePerShare;
-    
-    const totalShares = usdAmount / (priceCents / 100);
-    const displayVal = document.getElementById('est-shares-val');
-    if (displayVal) displayVal.textContent = totalShares.toFixed(2);
+    let usd = inputEl ? (parseFloat(inputEl.value) || 0) : 0;
+    if (usd > MAX_STAKE_USDC) { usd = MAX_STAKE_USDC; if (inputEl) inputEl.value = MAX_STAKE_USDC; }
+    const out = document.getElementById('est-payout-val');
+    const m = window._currentMarket;
+    if (!out) return;
+    if (!m || usd <= 0) { out.textContent = '—'; return; }
+    // Read current pools from the rendered rows isn't reliable; recompute from cache.
+    const idx = activeMarketSelection.numericIdx;
+    const poolUsd = (window._currentPools && window._currentPools[idx]) || 0;
+    const totalUsd = (window._currentPools || []).reduce((a, v) => a + v, 0);
+    const newBracketPool = poolUsd + usd;
+    const newTotal = totalUsd + usd;
+    const payout = newBracketPool > 0 ? (usd / newBracketPool) * newTotal * 0.98 : 0;
+    out.textContent = '$' + payout.toFixed(2);
   }
 
-  /* LIVE BLOCKCHAIN ROUTING PIPELINE */
+  /* PLACE A PARIMUTUEL BET ON-CHAIN */
   async function submitFinalBet() {
     if (!userWalletAddress) { connectWallet(); return; }
+    if (!activeMarketSelection || !window._currentMarket) { toast("Select a bracket first."); return; }
 
-    const usdAmountInput = parseFloat(document.getElementById('order-amount-input').value) || 0;
-    if (usdAmountInput <= 0) { toast("Please enter a valid investment amount!"); return; }
+    let usd = parseFloat(document.getElementById('order-amount-input').value) || 0;
+    if (usd <= 0) { toast("Enter a stake amount."); return; }
+    if (usd > MAX_STAKE_USDC) { usd = MAX_STAKE_USDC; }
+
+    const marketId = window._currentMarket.id;
+    const bracket  = activeMarketSelection.numericIdx;
 
     try {
-      toast("Initializing transaction routing...");
-
       const providerSource = selectedActiveWalletProvider || window.ethereum;
       const finalEthersProvider = new ethers.BrowserProvider(providerSource);
       const signer = await finalEthersProvider.getSigner();
 
-      const rawUsdcValue    = ethers.parseUnits(usdAmountInput.toString(), 6);
-      const usernameBytes32 = ethers.encodeBytes32String(currentPlayer);
-      const targetUnixEpoch = getMarketTargetEndTime();
-      const targetBracketId = activeMarketSelection.numericIdx;
-      const tokenInstance   = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
-      const marketInstance  = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
+      const rawUsdc = ethers.parseUnits(usd.toString(), 6);
+      const token   = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
+      const market  = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
 
-      toast("Checking token trade allowance bounds...");
-      const explicitAllowance = await tokenInstance.allowance(userWalletAddress, CONTRACT_ADDRESS);
+      // Enforce the per-wallet cap client-side too (contract also enforces it).
+      try {
+        const already = await market.totalStakedBy(marketId, userWalletAddress);
+        if (already + rawUsdc > ethers.parseUnits(String(MAX_STAKE_USDC), 6)) {
+          toast(`That exceeds the ${MAX_STAKE_USDC} USDC per-market cap for your wallet.`);
+          return;
+        }
+      } catch (_) {}
 
-      if (explicitAllowance < rawUsdcValue) {
-        toast("Approving USDC transfer parameters...");
-        await tokenInstance.approve(CONTRACT_ADDRESS, ethers.MaxUint256);
-        toast("Approval sent — submitting bet...");
-        // Small delay to let approval propagate before placing bet
-        await new Promise(resolve => setTimeout(resolve, 3000));
+      toast("Checking USDC allowance...");
+      const allowance = await token.allowance(userWalletAddress, CONTRACT_ADDRESS);
+      if (allowance < rawUsdc) {
+        toast("Approving USDC...");
+        const approveTx = await token.approve(CONTRACT_ADDRESS, ethers.parseUnits(String(MAX_STAKE_USDC), 6));
+        await approveTx.wait();
       }
-      const baseViewers = BigInt(Math.round(window._currentMarketBaseViewers || (data[currentPlayer]?.viewers) || 1500));
-      const purchaseTx = await marketInstance.placeBet(
-        usernameBytes32,
-        targetUnixEpoch,
-        targetBracketId,
-        rawUsdcValue,
-        baseViewers
-      );
 
-      toast("Trade successfully submitted on-chain! 🎉");
-      resetOrderSlipDefault();
-      // Reload market data after 5s to give chain time to confirm
-      setTimeout(async function() { if (currentPlayer) await loadMarketLayout(currentPlayer); }, 5000);
+      toast("Placing bet on-chain...");
+      const tx = await market.placeBet(marketId, bracket, rawUsdc);
+      await tx.wait();
+
+      toast("Bet placed! 🎉");
+      _marketsCache = { ts: 0, data: null }; // bust the markets cache
+      setTimeout(async function() { if (currentPlayer) await loadMarketLayout(currentPlayer); }, 2500);
+      renderPortfolioRows();
 
     } catch (txError) {
       console.error(txError);
+      const msg = (txError && (txError.shortMessage || txError.message)) || '';
       if (txError.code === "ACTION_REJECTED" || txError.code === 4001) {
-        toast("Transaction cancelled by user.");
+        toast("Transaction cancelled.");
+      } else if (msg.includes("betting closed")) {
+        toast("Betting has closed for this market.");
+      } else if (msg.includes("cap")) {
+        toast(`Per-market stake cap is ${MAX_STAKE_USDC} USDC.`);
       } else {
-        toast("Execution failed. Verify token balances.");
+        toast("Bet failed. Check your USDC balance and network.");
       }
     }
   }
