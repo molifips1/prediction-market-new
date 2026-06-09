@@ -838,7 +838,9 @@
 
 <script>
   const KICK = 'https://kick.com/';
-  // Oracle worker: serves /markets (streamer -> active market id) and runs the chain.
+  // CORS proxy worker — proxies the Kick API for live-status checks (fetchOne).
+  const KICK_PROXY_URL = 'https://blue-unit-891d.apetersen280.workers.dev/';
+  // Oracle worker — serves /markets (streamer -> active market id) and runs the chain.
   const WORKER_URL = 'https://streamslush-oracle.apetersen280.workers.dev';
 
   // ---- Polygon Amoy testnet (chainId 80002 = 0x13882) ----
@@ -1595,7 +1597,7 @@
 
   async function fetchOne(username) {
     try {
-      const r = await fetch(`${WORKER_URL}?user=${encodeURIComponent(username)}`);
+      const r = await fetch(`${KICK_PROXY_URL}?user=${encodeURIComponent(username)}`);
       if (!r.ok) throw new Error('Proxy error');
       
       const d = await r.json();
