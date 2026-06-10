@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -633,6 +634,23 @@
     #mli-betting { background: rgba(74,158,255,.12); border: 1px solid rgba(74,158,255,.45); color: #4a9eff; }
     #mli-settle { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary); }
     @media (max-width: 640px) { .pmh-header span:nth-child(2), .pmh-row span:nth-child(2) { display:none; } }
+    .cmt-composer { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+    .cmt-name-input { background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--text-primary); font-family: inherit; font-size: 13px; max-width: 220px; }
+    .cmt-input-row { display: flex; gap: 8px; align-items: stretch; }
+    .cmt-body-input { flex: 1; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text-primary); font-family: inherit; font-size: 14px; resize: vertical; min-height: 42px; }
+    .cmt-name-input:focus, .cmt-body-input:focus { outline: none; border-color: var(--polygon-purple, #7b3fe4); }
+    .cmt-post-btn { background: var(--polygon-purple, #7b3fe4); color: #fff; border: none; border-radius: 8px; padding: 0 22px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; flex: 0 0 auto; }
+    .cmt-post-btn:hover { opacity: .9; }
+    .cmt-post-btn:disabled { opacity: .5; cursor: default; }
+    .cmt-error { font-size: 12px; color: #e5484d; min-height: 0; }
+    .cmt-list { display: flex; flex-direction: column; gap: 14px; }
+    .cmt-item { display: flex; flex-direction: column; gap: 3px; padding-bottom: 13px; border-bottom: 1px solid var(--border); }
+    .cmt-item:last-child { border-bottom: none; }
+    .cmt-item-head { display: flex; align-items: baseline; gap: 8px; }
+    .cmt-author { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+    .cmt-author.wallet { color: #b794f6; font-family: monospace; font-weight: 600; }
+    .cmt-time { font-size: 11px; color: var(--text-muted); }
+    .cmt-body-text { font-size: 14px; color: var(--text-secondary); line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
     #fund-modal { position: relative; width: 100%; max-width: 440px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 26px 24px 22px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
     .fund-modal-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); font-size: 26px; line-height: 1; cursor: pointer; }
     .fund-modal-close:hover { color: var(--text-primary); }
@@ -867,11 +885,9 @@
       <div class="market-right-sticky-panel">
         <div class="market-live-info" id="market-live-info">
           <div class="mli-viewers">
-            <div class="mli-live-tag"><span class="lv-dot"></span>LIVE</div>
-            <div class="mli-viewers-main">
-              <span class="mli-count" id="mli-viewers-count">0</span>
-              <span class="mli-label">viewers watching now</span>
-            </div>
+            <svg class="mli-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="mli-count" id="mli-viewers-count">0</span>
+            <span class="mli-live"><span class="lv-dot"></span>live now</span>
           </div>
           <div class="mli-timing">
             <div class="mli-chip" id="mli-betting"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span id="mli-betting-text">—</span></div>
@@ -929,6 +945,26 @@
           </div>
           <div id="streamer-history-rows">
             <div style="padding:18px 4px; color: var(--text-muted); font-size:13px;">Loading past markets…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comments -->
+      <div class="market-rules-block" style="grid-column: 1 / -1;">
+        <div style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);">
+          <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 6px; display:flex; align-items:center; gap:8px;">
+            Comments <span id="cmt-count" style="color: var(--text-muted); font-weight:400; font-size:12px;"></span>
+          </div>
+          <div class="cmt-composer">
+            <input type="text" id="cmt-name" class="cmt-name-input" placeholder="Name (optional)" maxlength="40" />
+            <div class="cmt-input-row">
+              <textarea id="cmt-body" class="cmt-body-input" placeholder="Add a comment…" maxlength="500" rows="2"></textarea>
+              <button id="cmt-post-btn" class="cmt-post-btn" onclick="postComment()">Post</button>
+            </div>
+            <div id="cmt-error" class="cmt-error"></div>
+          </div>
+          <div id="cmt-list" class="cmt-list">
+            <div style="padding:16px 2px; color: var(--text-muted); font-size:13px;">Loading comments…</div>
           </div>
         </div>
       </div>
@@ -1017,6 +1053,17 @@
   const KICK_PROXY_URL = 'https://blue-unit-891d.apetersen280.workers.dev/';
   // Oracle worker — serves /markets (streamer -> active market id) and runs the chain.
   const WORKER_URL = 'https://streamslush-oracle.apetersen280.workers.dev';
+
+  // ---- Supabase (comments) ----
+  const SUPABASE_URL = 'https://jkiztggxyyhbdhynapxq.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpraXp0Z2d4eXloYmRoeW5hcHhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzMwNjMsImV4cCI6MjA5NjY0OTA2M30.ZRmRYbExza0sp7BhXIMSn52R8gpQv9FXz6ptFBSHD38';
+  let _supabase = null;
+  function getSupabase() {
+    if (!_supabase && window.supabase) {
+      _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    }
+    return _supabase;
+  }
 
   // ---- Polygon Amoy testnet (chainId 80002 = 0x13882) ----
   const POLYGON_CHAIN_ID = '0x13882';
@@ -2207,8 +2254,90 @@
     renderSidebar();
     loadMarketLayout(username);
     loadStreamerHistory(username);
+    loadComments(username);
     startTimelineClocks();
     window.scrollTo(0, 0);
+  }
+
+  // ---- comments (Supabase) ----
+  function cmtTimeAgo(ts) {
+    const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s/60) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago';
+    if (s < 604800) return Math.floor(s/86400) + 'd ago';
+    return new Date(ts).toLocaleDateString();
+  }
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  async function loadComments(username) {
+    const listEl = document.getElementById('cmt-list');
+    const countEl = document.getElementById('cmt-count');
+    if (!listEl) return;
+    const sb = getSupabase();
+    if (!sb) { listEl.innerHTML = '<div style="padding:16px 2px; color: var(--text-muted); font-size:13px;">Comments unavailable.</div>'; return; }
+    listEl.innerHTML = '<div style="padding:16px 2px; color: var(--text-muted); font-size:13px;">Loading comments…</div>';
+    try {
+      const { data, error } = await sb
+        .from('comments')
+        .select('author, body, created_at')
+        .eq('streamer', username)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      if (countEl) countEl.textContent = data.length ? '(' + data.length + ')' : '';
+      if (!data.length) {
+        listEl.innerHTML = '<div style="padding:16px 2px; color: var(--text-muted); font-size:13px;">No comments yet. Be the first to post.</div>';
+        return;
+      }
+      listEl.innerHTML = data.map(function(c) {
+        const isWallet = /^0x[a-fA-F0-9]{4}…[a-fA-F0-9]{4}$/.test(c.author);
+        return '<div class="cmt-item">' +
+          '<div class="cmt-item-head">' +
+            '<span class="cmt-author' + (isWallet ? ' wallet' : '') + '">' + escapeHtml(c.author) + '</span>' +
+            '<span class="cmt-time">' + cmtTimeAgo(c.created_at) + '</span>' +
+          '</div>' +
+          '<div class="cmt-body-text">' + escapeHtml(c.body) + '</div>' +
+        '</div>';
+      }).join('');
+    } catch (e) {
+      console.error('loadComments failed', e);
+      listEl.innerHTML = '<div style="padding:16px 2px; color: var(--text-muted); font-size:13px;">Could not load comments.</div>';
+    }
+  }
+
+  async function postComment() {
+    const errEl = document.getElementById('cmt-error');
+    const bodyEl = document.getElementById('cmt-body');
+    const nameEl = document.getElementById('cmt-name');
+    const btn = document.getElementById('cmt-post-btn');
+    if (errEl) errEl.textContent = '';
+    const body = (bodyEl.value || '').trim();
+    if (!body) { if (errEl) errEl.textContent = 'Write something first.'; return; }
+    if (body.length > 500) { if (errEl) errEl.textContent = 'Comment too long (max 500).'; return; }
+    // Identity: connected wallet (truncated) > typed name > Anonymous
+    let author = (nameEl.value || '').trim();
+    if (!author && userWalletAddress) {
+      author = userWalletAddress.slice(0, 6) + '…' + userWalletAddress.slice(-4);
+    }
+    if (!author) author = 'Anonymous';
+    author = author.slice(0, 40);
+    const sb = getSupabase();
+    if (!sb || !currentPlayer) { if (errEl) errEl.textContent = 'Comments unavailable right now.'; return; }
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = 'Posting…'; }
+      const { error } = await sb.from('comments').insert({ streamer: currentPlayer, author: author, body: body });
+      if (error) throw error;
+      bodyEl.value = '';
+      await loadComments(currentPlayer);
+    } catch (e) {
+      console.error('postComment failed', e);
+      if (errEl) errEl.textContent = 'Could not post. Try again.';
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Post'; }
+    }
   }
 
   // Load all past markets for this streamer (from worker /history + on-chain reads).
