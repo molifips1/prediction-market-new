@@ -581,6 +581,24 @@
     .bucket-row-item.skeleton-row .row-bet-btn { border-color: transparent !important; }
 
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1c1e28; border: 1px solid var(--border); color: var(--text-primary); font-size: 13px; padding: 10px 20px; border-radius: 20px; z-index: 300; transition: transform .3s ease; pointer-events: none; white-space: nowrap; }
+    #fund-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.66); z-index: 400; align-items: center; justify-content: center; padding: 20px; }
+    #fund-modal-overlay.show { display: flex; }
+    #fund-modal { position: relative; width: 100%; max-width: 440px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 26px 24px 22px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+    .fund-modal-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); font-size: 26px; line-height: 1; cursor: pointer; }
+    .fund-modal-close:hover { color: var(--text-primary); }
+    .fund-modal-title { font-size: 19px; font-weight: 700; color: #fff; margin: 0 0 6px; }
+    .fund-modal-sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 18px; line-height: 1.5; }
+    .fund-step { display: flex; gap: 12px; padding: 14px 0; border-top: 1px solid var(--border); }
+    .fund-step-num { flex: 0 0 26px; height: 26px; border-radius: 50%; background: var(--polygon-purple, #7b3fe4); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .fund-step-head { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 3px; }
+    .fund-step-body { font-size: 12.5px; color: var(--text-secondary); line-height: 1.45; margin-bottom: 9px; }
+    .fund-link { display: inline-block; font-size: 13px; color: var(--yes-green); text-decoration: none; font-weight: 600; }
+    .fund-link:hover { text-decoration: underline; }
+    .fund-faucet-btn { background: var(--yes-green); color: #0a0b0e; border: none; font-family: inherit; font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer; }
+    .fund-faucet-btn:hover { opacity: .9; }
+    .fund-faucet-btn:disabled { opacity: .6; cursor: default; }
+    .fund-balance { display: block; font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+    .fund-modal-footnote { font-size: 11.5px; color: var(--text-muted); margin: 16px 0 0; line-height: 1.45; }
     #toast.show { transform: translateX(-50%) translateY(0); }
 
     @media (max-width: 1024px) {
@@ -842,6 +860,36 @@
 
 <div id="toast"></div>
 
+<!-- Funding info modal: shown after wallet connect to explain how to fund up -->
+<div id="fund-modal-overlay" onclick="if(event.target===this)closeFundModal()">
+  <div id="fund-modal">
+    <button class="fund-modal-close" onclick="closeFundModal()" aria-label="Close">&times;</button>
+    <h2 class="fund-modal-title">Fund your wallet to bet</h2>
+    <p class="fund-modal-sub">StreamSlush runs on the <b>Polygon Amoy testnet</b>. To place a bet you need two free test assets — no real money involved.</p>
+
+    <div class="fund-step">
+      <div class="fund-step-num">1</div>
+      <div>
+        <div class="fund-step-head">Get test POL (for gas)</div>
+        <div class="fund-step-body">Every transaction needs a tiny amount of POL for gas. Grab free Amoy POL from a faucet.</div>
+        <a class="fund-link" href="https://faucet.polygon.technology/" target="_blank" rel="noopener">Open Polygon faucet ↗</a>
+      </div>
+    </div>
+
+    <div class="fund-step">
+      <div class="fund-step-num">2</div>
+      <div>
+        <div class="fund-step-head">Get test USDC (to bet with)</div>
+        <div class="fund-step-body">Bets are placed in test USDC. Click below to mint some straight to your wallet.</div>
+        <button class="fund-faucet-btn" id="fund-faucet-btn" onclick="getTestUsdc()">Get 100 test USDC</button>
+        <span class="fund-balance" id="fund-balance"></span>
+      </div>
+    </div>
+
+    <p class="fund-modal-footnote">Your current balance updates above after minting. Once you have both, pick a viewer bracket and place your bet.</p>
+  </div>
+</div>
+
 <script>
   const KICK = 'https://kick.com/';
   // CORS proxy worker — proxies the Kick API for live-status checks (fetchOne).
@@ -1059,6 +1107,8 @@
         selectBetSlip(activeMarketSelection.bucketId, activeMarketSelection.numericIdx, activeMarketSelection.label);
       }
       toast("Wallet Connected Successfully! 🎉");
+      // First-time funding helper: if the wallet is low on test USDC, show how to fund up.
+      maybeShowFundModal();
     } catch (err) {
       console.error(err);
       if (err.code === 4001) {
@@ -1078,6 +1128,77 @@
     } else {
       btnText.textContent = "Connect Wallet";
       if (btn) btn.classList.remove('connected');
+    }
+  }
+
+  // ---- funding helper modal ----
+  async function refreshFundBalance() {
+    const el = document.getElementById('fund-balance');
+    if (!el || !userWalletAddress) return 0n;
+    try {
+      const provider = await getWorkingProvider();
+      const token = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, provider);
+      const bal = await token.balanceOf(userWalletAddress);
+      el.textContent = 'Your balance: ' + (Number(bal) / 1e6).toFixed(2) + ' test USDC';
+      return bal;
+    } catch (e) { el.textContent = ''; return 0n; }
+  }
+
+  async function maybeShowFundModal() {
+    if (!userWalletAddress) return;
+    try {
+      const provider = await getWorkingProvider();
+      const token = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, provider);
+      const bal = await token.balanceOf(userWalletAddress);
+      // Only nudge if they have less than 1 USDC — enough to bet means no nag.
+      if (bal < ethers.parseUnits('1', 6)) {
+        document.getElementById('fund-modal-overlay').classList.add('show');
+        refreshFundBalance();
+      }
+    } catch (e) { /* if balance check fails, don't block the user */ }
+  }
+
+  function openFundModal() {
+    document.getElementById('fund-modal-overlay').classList.add('show');
+    refreshFundBalance();
+  }
+  function closeFundModal() {
+    document.getElementById('fund-modal-overlay').classList.remove('show');
+  }
+
+  async function getTestUsdc() {
+    if (!userWalletAddress) { connectWallet(); return; }
+    const btn = document.getElementById('fund-faucet-btn');
+    try {
+      const providerSource = selectedActiveWalletProvider || window.ethereum;
+      const signer = await (new ethers.BrowserProvider(providerSource)).getSigner();
+      // MockUSDC faucet: mints test USDC to the caller. amount in 6-decimals.
+      const faucetAbi = ["function faucet(uint256 amount) external"];
+      const token = new ethers.Contract(USDC_ADDRESS, faucetAbi, signer);
+      if (btn) { btn.disabled = true; btn.textContent = 'Minting…'; }
+      toast('Minting test USDC…');
+      const tx = await token.faucet(ethers.parseUnits('100', 6));
+      await tx.wait();
+      toast('100 test USDC minted! 🎉');
+      await refreshFundBalance();
+      if (btn) { btn.disabled = false; btn.textContent = 'Get 100 more'; }
+    } catch (e) {
+      console.error(e);
+      // Some MockUSDC builds expose faucet() with no args — try that as a fallback.
+      try {
+        const providerSource = selectedActiveWalletProvider || window.ethereum;
+        const signer = await (new ethers.BrowserProvider(providerSource)).getSigner();
+        const token = new ethers.Contract(USDC_ADDRESS, ["function faucet() external"], signer);
+        toast('Minting test USDC…');
+        const tx = await token.faucet();
+        await tx.wait();
+        toast('Test USDC minted! 🎉');
+        await refreshFundBalance();
+      } catch (e2) {
+        console.error(e2);
+        toast('Could not mint. Make sure you are on Amoy.');
+      }
+      if (btn) { btn.disabled = false; btn.textContent = 'Get 100 test USDC'; }
     }
   }
 
