@@ -230,6 +230,13 @@
     .player-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; background: var(--live-red); color: #fff; }
     .player-viewers { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; }
     .player-viewers svg { width: 13px; height: 13px; }
+    /* Prominent live viewer counter */
+    .live-viewers { display: inline-flex; align-items: center; gap: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 8px 16px; }
+    .live-viewers .lv-dot { width: 10px; height: 10px; border-radius: 50%; background: #e5484d; box-shadow: 0 0 0 0 rgba(229,72,77,.6); animation: lvpulse 1.6s infinite; flex: 0 0 auto; }
+    @keyframes lvpulse { 0% { box-shadow: 0 0 0 0 rgba(229,72,77,.55); } 70% { box-shadow: 0 0 0 9px rgba(229,72,77,0); } 100% { box-shadow: 0 0 0 0 rgba(229,72,77,0); } }
+    .live-viewers .lv-count { font-size: 26px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+    .live-viewers .lv-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; line-height: 1.1; }
+    @media (max-width: 640px) { .live-viewers .lv-count { font-size: 22px; } }
     .player-kick-link {
       margin-left: auto; display: flex; align-items: center; gap: 5px;
       font-size: 12px; font-weight: 600; color: var(--green-text);
@@ -787,10 +794,14 @@
         </button>
         <span class="player-streamer-name" id="player-name"></span>
         <span class="player-badge" id="player-live-badge" style="display:none">LIVE</span>
-        <span class="player-viewers" id="player-viewers" style="display:none">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          <span id="player-viewers-count"></span>
-        </span>
+      </div>
+
+      <div class="live-viewers" id="player-viewers" style="display:none; margin-top:4px;">
+        <span class="lv-dot"></span>
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <span class="lv-count" id="player-viewers-count">0</span>
+          <span class="lv-label">watching now</span>
+        </div>
       </div>
 
       <div class="timeline-chips-wrapper">
@@ -2126,7 +2137,7 @@
     if (d?.isLive) {
       liveBadge.style.display = 'inline-block';
       viewersEl.style.display = 'flex';
-      document.getElementById('player-viewers-count').textContent = fv(d.viewers);
+      document.getElementById('player-viewers-count').textContent = Number(d.viewers || 0).toLocaleString();
     } else {
       liveBadge.style.display = 'none';
       viewersEl.style.display = 'none';
