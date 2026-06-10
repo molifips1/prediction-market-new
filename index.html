@@ -1173,16 +1173,42 @@
     document.getElementById('fund-modal-overlay').classList.remove('show');
   }
 
+  async function ensureAmoy() {
+    const providerSource = selectedActiveWalletProvider || window.ethereum;
+    if (!providerSource) throw new Error('no wallet');
+    try {
+      await providerSource.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: POLYGON_CHAIN_ID }]
+      });
+    } catch (switchError) {
+      if (switchError.code === 4902) {
+        await providerSource.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: POLYGON_CHAIN_ID,
+            chainName: 'Polygon Amoy Testnet',
+            nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
+            rpcUrls: ['https://rpc-amoy.polygon.technology'],
+            blockExplorerUrls: ['https://amoy.polygonscan.com/']
+          }]
+        });
+      } else {
+        throw switchError;
+      }
+    }
+    return providerSource;
+  }
+
   async function getTestUsdc() {
     if (!userWalletAddress) { connectWallet(); return; }
     const btn = document.getElementById('fund-faucet-btn');
     try {
-      const providerSource = selectedActiveWalletProvider || window.ethereum;
-      const signer = await (new ethers.BrowserProvider(providerSource)).getSigner();
-      // MockUSDC faucet: mints test USDC to the caller. amount in 6-decimals.
-      const faucetAbi = ["function faucet(uint256 amount) external"];
-      const token = new ethers.Contract(USDC_ADDRESS, faucetAbi, signer);
       if (btn) { btn.disabled = true; btn.textContent = 'Minting…'; }
+      // Make sure the wallet is on Amoy before sending the faucet tx.
+      const providerSource = await ensureAmoy();
+      const signer = await (new ethers.BrowserProvider(providerSource)).getSigner();
+      const token = new ethers.Contract(USDC_ADDRESS, ["function faucet(uint256 amount) external"], signer);
       toast('Minting test USDC…');
       const tx = await token.faucet(ethers.parseUnits('100', 6));
       await tx.wait();
@@ -1191,19 +1217,13 @@
       if (btn) { btn.disabled = false; btn.textContent = 'Get 100 more'; }
     } catch (e) {
       console.error(e);
-      // Some MockUSDC builds expose faucet() with no args — try that as a fallback.
-      try {
-        const providerSource = selectedActiveWalletProvider || window.ethereum;
-        const signer = await (new ethers.BrowserProvider(providerSource)).getSigner();
-        const token = new ethers.Contract(USDC_ADDRESS, ["function faucet() external"], signer);
-        toast('Minting test USDC…');
-        const tx = await token.faucet();
-        await tx.wait();
-        toast('Test USDC minted! 🎉');
-        await refreshFundBalance();
-      } catch (e2) {
-        console.error(e2);
-        toast('Could not mint. Make sure you are on Amoy.');
+      const msg = (e && (e.shortMessage || e.message)) || '';
+      if (e && (e.code === 4001 || e.code === 'ACTION_REJECTED')) {
+        toast('Network switch or mint cancelled.');
+      } else if (msg.toLowerCase().includes('network') || msg.includes('chain')) {
+        toast('Please approve the switch to Polygon Amoy, then try again.');
+      } else {
+        toast('Could not mint. Approve the Amoy network switch and retry.');
       }
       if (btn) { btn.disabled = false; btn.textContent = 'Get 100 test USDC'; }
     }
