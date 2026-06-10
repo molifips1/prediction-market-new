@@ -152,8 +152,8 @@
     #portfolio-view { display: none; flex: 1; margin-left: var(--sidebar-w); padding: 28px 28px 40px; min-width: 0; }
     #portfolio-view.active { display: block !important; }
     .portfolio-table-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-top: 16px; }
-    .portfolio-header-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr 1.5fr; padding: 14px 20px; background: var(--bg-nav); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-    .portfolio-data-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr 1.5fr; padding: 16px 20px; border-bottom: 1px solid var(--border); font-size: 14px; align-items: center; }
+    .portfolio-header-row { display: grid; grid-template-columns: 1.4fr 1.2fr 1.3fr 1.3fr 1fr 1.3fr 1.2fr; padding: 14px 20px; background: var(--bg-nav); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    .portfolio-data-row { display: grid; grid-template-columns: 1.4fr 1.2fr 1.3fr 1.3fr 1fr 1.3fr 1.2fr; padding: 16px 20px; border-bottom: 1px solid var(--border); font-size: 14px; align-items: center; }
     .portfolio-data-row:last-child { border-bottom: none; }
     .claim-btn { background: var(--yes-green); color: #0a0b0e; border: none; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; transition: opacity 0.15s; }
     .claim-btn:hover { opacity: 0.88; }
@@ -697,9 +697,11 @@
     </div>
     <div class="portfolio-table-wrap">
       <div class="portfolio-header-row">
-        <span>Market</span>
-        <span>Your Stake</span>
-        <span>Claimable</span>
+        <span>Streamer</span>
+        <span>Date</span>
+        <span>Your Pick</span>
+        <span>Outcome</span>
+        <span>Stake</span>
         <span>Status</span>
         <span style="text-align: right;">Action</span>
       </div>
@@ -1168,16 +1170,46 @@
         const stakedUsd = (Number(stakedAmt) / 1e6).toFixed(2);
         const claimableUsd = (Number(claimable) / 1e6).toFixed(2);
         const labels = thresholds ? bracketLabelsFromThresholds(thresholds) : null;
-        const winLabel = (status === MKT.Settled && labels) ? labels[Number(mkt.winningBracket)] : null;
+        const winBracket = Number(mkt.winningBracket);
+        const winLabel = (status === MKT.Settled && labels) ? labels[winBracket] : null;
 
-        const streamer = (histMap[id] && histMap[id].streamer)
-          ? (data[histMap[id].streamer]?.displayName || histMap[id].streamer)
+        // Which bracket(s) did this user back? Scan stakeOf across the 9 brackets.
+        const stakeByBracket = await Promise.all(
+          Array.from({length: NUM_BRACKETS}, (_, b) =>
+            contract.stakeOf(id, b, userWalletAddress).catch(() => 0n))
+        );
+        const pickedIdxs = [];
+        stakeByBracket.forEach((s, b) => { if (s > 0n) pickedIdxs.push(b); });
+        const pickLabel = (labels && pickedIdxs.length)
+          ? pickedIdxs.map(b => labels[b]).join(', ')
+          : (pickedIdxs.length ? pickedIdxs.map(b => 'Bracket ' + b).join(', ') : '—');
+
+        // Streamer name + date from the worker history map (new markets only).
+        const h = histMap[id];
+        const streamer = (h && h.streamer)
+          ? (data[h.streamer]?.displayName || h.streamer)
           : ('Market #' + id);
+        const dateStr = (h && h.openTime)
+          ? new Date(h.openTime * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : '—';
 
+        // Outcome of the user's bet.
+        let outcomeText, outcomeColor;
+        if (status === MKT.Active) {
+          outcomeText = 'In play'; outcomeColor = 'var(--text-secondary)';
+        } else if (status === MKT.Voided) {
+          outcomeText = 'Voided'; outcomeColor = '#f5a623';
+        } else {
+          const won = pickedIdxs.includes(winBracket);
+          outcomeText = won ? ('Won · ' + (winLabel || '')) : ('Lost · won: ' + (winLabel || '?'));
+          outcomeColor = won ? 'var(--green-text)' : 'var(--text-muted)';
+        }
+
+        // Status of the bet (settlement state).
         let statusText, statusColor;
-        if (status === MKT.Active)       { statusText = 'Active'; statusColor = 'var(--text-secondary)'; }
-        else if (status === MKT.Settled) { statusText = 'Resolved' + (winLabel ? ' · ' + winLabel : ''); statusColor = 'var(--green-text)'; }
-        else                             { statusText = 'Voided (refundable)'; statusColor = '#f5a623'; }
+        if (status === MKT.Active)       { statusText = 'Open'; statusColor = 'var(--text-secondary)'; }
+        else if (status === MKT.Settled) { statusText = 'Resolved'; statusColor = 'var(--green-text)'; }
+        else                             { statusText = 'Refundable'; statusColor = '#f5a623'; }
 
         const canClaim = !alreadyClaimed && claimable > 0n && (status === MKT.Settled || status === MKT.Voided);
         const claimBtn = alreadyClaimed
@@ -1187,9 +1219,11 @@
               : '<button class="claim-btn" disabled>' + (status === MKT.Active ? 'In play' : 'Nothing to claim') + '</button>');
 
         const rowHtml = '<div class="portfolio-data-row">' +
-          '<span style="font-weight:600;color:#fff;">' + streamer + ' <span style="color:var(--text-muted);font-weight:400;">#' + id + '</span></span>' +
-          '<span>Staked $' + stakedUsd + ' USDC</span>' +
-          '<span>' + (canClaim ? 'Claimable $' + claimableUsd : '—') + '</span>' +
+          '<span style="font-weight:600;color:#fff;">' + streamer + '</span>' +
+          '<span style="color:var(--text-secondary);">' + dateStr + '</span>' +
+          '<span>' + pickLabel + '</span>' +
+          '<span style="color:' + outcomeColor + ';font-weight:500;">' + outcomeText + '</span>' +
+          '<span>$' + stakedUsd + '</span>' +
           '<span style="color:' + statusColor + ';font-weight:500;">' + statusText + '</span>' +
           '<div style="text-align:right;">' + claimBtn + '</div>' +
         '</div>';
