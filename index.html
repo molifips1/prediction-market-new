@@ -362,7 +362,10 @@
     .bucket-row-item:last-child { border-bottom: none; }
     .bucket-row-item { cursor: pointer; }
     .bucket-row-item:hover { background: rgba(255,255,255,.03); }
-    .bucket-row-item.selected { background: rgba(123, 63, 228, 0.08); box-shadow: inset 3px 0 0 var(--polygon-purple, #7b3fe4); }
+    .bucket-row-item.selected { background: rgba(123, 63, 228, 0.12); box-shadow: inset 3px 0 0 var(--polygon-purple, #7b3fe4); }
+    .bucket-row-item.selected .bucket-row-title { color: #fff; }
+    .bucket-row-item.selected .bucket-row-title::before { content: '✓ '; color: var(--polygon-purple, #7b3fe4); font-weight: 800; }
+    .bucket-row-item.selected .row-bet-btn.yes { background: var(--polygon-purple, #7b3fe4); border-color: var(--polygon-purple, #7b3fe4); color: #fff; }
 
     .bucket-row-title {
       font-size: 15px;
@@ -612,6 +615,15 @@
     .pmh-header { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); font-weight: 600; padding: 8px 4px; border-bottom: 1px solid var(--border); }
     .pmh-row { font-size: 13px; color: var(--text-secondary); padding: 12px 4px; border-bottom: 1px solid var(--border); }
     .pmh-row:last-child { border-bottom: none; }
+    .market-live-info { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
+    .mli-viewers { display: flex; align-items: baseline; gap: 8px; }
+    .mli-viewers .lv-dot { width: 9px; height: 9px; align-self: center; }
+    .mli-count { font-size: 24px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; }
+    .mli-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+    .mli-timing { display: flex; gap: 8px; flex-wrap: wrap; }
+    .mli-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    .mli-chip svg { width: 13px; height: 13px; }
+    .mli-chip.live { color: #4a9eff; border-color: rgba(74,158,255,.4); }
     @media (max-width: 640px) { .pmh-header span:nth-child(2), .pmh-row span:nth-child(2) { display:none; } }
     #fund-modal { position: relative; width: 100%; max-width: 440px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 26px 24px 22px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
     .fund-modal-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); font-size: 26px; line-height: 1; cursor: pointer; }
@@ -806,15 +818,9 @@
         </button>
         <span class="player-streamer-name" id="player-name"></span>
         <span class="player-badge" id="player-live-badge" style="display:none">LIVE</span>
-
-        <div class="live-viewers" id="player-viewers" style="display:none; margin-left:auto;">
-          <span class="lv-dot"></span>
-          <span class="lv-count" id="player-viewers-count">0</span>
-          <span class="lv-label">watching now</span>
-        </div>
       </div>
 
-      <div class="timeline-chips-wrapper">
+      <div class="timeline-chips-wrapper" style="display:none;">
         <div class="timeline-badge-pill countdown">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <span id="timeline-clock-countdown">00m 00s left to trade</span>
@@ -850,6 +856,17 @@
       </div>
 
       <div class="market-right-sticky-panel">
+        <div class="market-live-info" id="market-live-info">
+          <div class="mli-viewers">
+            <span class="lv-dot"></span>
+            <span class="mli-count" id="mli-viewers-count">0</span>
+            <span class="mli-label">watching now</span>
+          </div>
+          <div class="mli-timing">
+            <div class="mli-chip" id="mli-betting"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span id="mli-betting-text">—</span></div>
+            <div class="mli-chip" id="mli-settle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span id="mli-settle-text">—</span></div>
+          </div>
+        </div>
         <div id="order-slip-container">
           <div class="order-slip-card">
             <span class="order-market-title-heading">Viewer Bracket Order Slip</span>
@@ -1620,8 +1637,8 @@
     clockIntervalTimer = setInterval(() => {
       if (!currentPlayer) return;
 
-      const clockEl = document.getElementById('timeline-clock-countdown');
-      const resolutionEl = document.getElementById('timeline-resolution-schedule');
+      const clockEl = document.getElementById('mli-betting-text');
+      const resolutionEl = document.getElementById('mli-settle-text');
       const m = window._currentMarket;
 
       if (!m) {
@@ -2252,14 +2269,15 @@
     document.getElementById('player-title').textContent = d?.title || '';
     document.getElementById('player-category').textContent = d?.category || '';
     const liveBadge = document.getElementById('player-live-badge');
-    const viewersEl = document.getElementById('player-viewers');
+    const mliCount = document.getElementById('mli-viewers-count');
+    const mliInfo = document.getElementById('market-live-info');
     if (d?.isLive) {
       liveBadge.style.display = 'inline-block';
-      viewersEl.style.display = 'flex';
-      document.getElementById('player-viewers-count').textContent = Number(d.viewers || 0).toLocaleString();
+      if (mliInfo) mliInfo.style.display = 'flex';
+      if (mliCount) mliCount.textContent = Number(d.viewers || 0).toLocaleString();
     } else {
       liveBadge.style.display = 'none';
-      viewersEl.style.display = 'none';
+      if (mliInfo) mliInfo.style.display = 'none';
     }
   }
 
