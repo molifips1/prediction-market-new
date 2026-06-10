@@ -693,9 +693,9 @@
     </div>
     <div class="portfolio-table-wrap">
       <div class="portfolio-header-row">
-        <span>Market / Streamer</span>
-        <span>Bracket Option</span>
-        <span>Shares Held</span>
+        <span>Market</span>
+        <span>Your Stake</span>
+        <span>Claimable</span>
         <span>Status</span>
         <span style="text-align: right;">Action</span>
       </div>
@@ -1116,46 +1116,59 @@
 
     try {
       const contract = await getReadContract();
-      const provider = await getWorkingProvider();
 
-      // Find the market ids this wallet has bet in, via BetPlaced events.
-      const filter = contract.filters.BetPlaced(null, userWalletAddress);
-      const latestBlock = await provider.getBlockNumber();
-      const CHUNK = 9000;
-      const LOOK_BACK = 90000;
-      const fromBlock = Math.max(0, latestBlock - LOOK_BACK);
-      let events = [];
-      for (let from = fromBlock; from <= latestBlock; from += CHUNK) {
-        const to = Math.min(from + CHUNK - 1, latestBlock);
-        try { events = events.concat(await contract.queryFilter(filter, from, to)); }
-        catch (e) { console.warn('chunk failed', from, to, e); }
-      }
+      // Fetch the id -> streamer history map from the worker (for labeling).
+      let histMap = {};
+      try {
+        const hres = await fetch(WORKER_URL.replace(/\/$/, '') + '/history', { cache: 'no-store' });
+        const hjson = await hres.json();
+        histMap = hjson.markets || {};
+      } catch (_) {}
 
-      if (events.length === 0) {
+      // Direct state read (robust on public RPCs): walk recent market ids and
+      // check this wallet's stake in each via totalStakedBy. No event-log scan.
+      const count = Number(await contract.marketCount());
+      if (count === 0) {
         container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>No bets placed yet.</p></div>';
         return;
       }
 
-      // Distinct market ids.
-      const ids = Array.from(new Set(events.map(ev => ev.args.id.toString())));
+      const LOOK_BACK_MARKETS = 300;
+      const startId = Math.max(1, count - LOOK_BACK_MARKETS + 1);
+      const ids = [];
+      for (let i = count; i >= startId; i--) ids.push(String(i));
 
-      const rows = await Promise.all(ids.map(async function(id) {
-        let mkt, claimable, staked, alreadyClaimed, thresholds;
+      const staked = await Promise.all(ids.map(id =>
+        contract.totalStakedBy(id, userWalletAddress).catch(() => 0n)
+      ));
+      const myIds = ids.filter((id, i) => staked[i] > 0n);
+
+      if (myIds.length === 0) {
+        container.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>No bets placed yet.</p></div>';
+        return;
+      }
+
+      const built = await Promise.all(myIds.map(async function(id) {
+        let mkt, claimable, stakedAmt, alreadyClaimed, thresholds;
         try {
-          [mkt, claimable, staked, alreadyClaimed, thresholds] = await Promise.all([
+          [mkt, claimable, stakedAmt, alreadyClaimed, thresholds] = await Promise.all([
             contract.getMarket(id),
             contract.previewClaim(id, userWalletAddress).catch(() => 0n),
             contract.totalStakedBy(id, userWalletAddress).catch(() => 0n),
             contract.claimed(id, userWalletAddress).catch(() => false),
             contract.getThresholds(id).catch(() => null)
           ]);
-        } catch (e) { return ''; }
+        } catch (e) { return null; }
 
         const status = Number(mkt.status);
-        const stakedUsd = (Number(staked) / 1e6).toFixed(2);
+        const stakedUsd = (Number(stakedAmt) / 1e6).toFixed(2);
         const claimableUsd = (Number(claimable) / 1e6).toFixed(2);
         const labels = thresholds ? bracketLabelsFromThresholds(thresholds) : null;
         const winLabel = (status === MKT.Settled && labels) ? labels[Number(mkt.winningBracket)] : null;
+
+        const streamer = (histMap[id] && histMap[id].streamer)
+          ? (data[histMap[id].streamer]?.displayName || histMap[id].streamer)
+          : ('Market #' + id);
 
         let statusText, statusColor;
         if (status === MKT.Active)       { statusText = 'Active'; statusColor = 'var(--text-secondary)'; }
@@ -1169,16 +1182,25 @@
               ? '<button class="claim-btn" data-id="' + id + '" onclick="claimOnChainBtn(this)">Claim $' + claimableUsd + '</button>'
               : '<button class="claim-btn" disabled>' + (status === MKT.Active ? 'In play' : 'Nothing to claim') + '</button>');
 
-        return '<div class="portfolio-data-row">' +
-          '<span style="font-weight:600;color:#fff;">Market #' + id + '</span>' +
+        const rowHtml = '<div class="portfolio-data-row">' +
+          '<span style="font-weight:600;color:#fff;">' + streamer + ' <span style="color:var(--text-muted);font-weight:400;">#' + id + '</span></span>' +
           '<span>Staked $' + stakedUsd + ' USDC</span>' +
           '<span>' + (canClaim ? 'Claimable $' + claimableUsd : '—') + '</span>' +
           '<span style="color:' + statusColor + ';font-weight:500;">' + statusText + '</span>' +
           '<div style="text-align:right;">' + claimBtn + '</div>' +
         '</div>';
+
+        return { id, status, rowHtml };
       }));
 
-      const html = rows.filter(Boolean).join('');
+      const rowsArr = built.filter(Boolean);
+      const open = rowsArr.filter(r => r.status === MKT.Active).map(r => r.rowHtml).join('');
+      const resolved = rowsArr.filter(r => r.status !== MKT.Active).map(r => r.rowHtml).join('');
+
+      let html = '';
+      if (open) html += '<div class="portfolio-section-label" style="padding:10px 4px;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Open positions</div>' + open;
+      if (resolved) html += '<div class="portfolio-section-label" style="padding:14px 4px 10px;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">History</div>' + resolved;
+
       container.innerHTML = html || '<div class="empty" style="grid-column:1/-1;padding:40px 20px;"><p>No bets placed yet.</p></div>';
     } catch (e) {
       console.error('Portfolio load error:', e);
