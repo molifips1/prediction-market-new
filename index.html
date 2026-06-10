@@ -352,42 +352,48 @@
     }
     .bucket-row-item {
       display: grid;
-      grid-template-columns: 1fr 140px 100px 100px;
+      grid-template-columns: 1.4fr 1fr auto;
       align-items: center;
-      padding: 16px 20px;
+      padding: 14px 20px;
       border-bottom: 1px solid var(--border);
-      gap: 12px;
+      gap: 18px;
       transition: background 0.15s;
     }
     .bucket-row-item:last-child { border-bottom: none; }
     .bucket-row-item { cursor: pointer; }
     .bucket-row-item:hover { background: rgba(255,255,255,.03); }
-    .bucket-row-item.selected { background: rgba(0, 75, 255, 0.04); }
-    
+    .bucket-row-item.selected { background: rgba(123, 63, 228, 0.08); box-shadow: inset 3px 0 0 var(--polygon-purple, #7b3fe4); }
+
     .bucket-row-title {
-      font-size: 14px;
-      font-weight: 600;
+      font-size: 15px;
+      font-weight: 700;
       color: var(--text-primary);
     }
+    .bucket-row-meta { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
     .bucket-row-volume {
-      font-size: 13px;
-      color: var(--text-muted);
-      text-align: right;
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      display: flex; justify-content: space-between; gap: 10px;
     }
+    .bucket-row-volume .bv-odds { color: var(--text-primary); font-weight: 700; }
+    .bucket-pool-bar { height: 5px; border-radius: 3px; background: var(--bg-input); overflow: hidden; }
+    .bucket-pool-bar > span { display: block; height: 100%; background: var(--polygon-purple, #7b3fe4); border-radius: 3px; transition: width .3s; }
     .row-bet-btn {
       border: none;
       border-radius: var(--radius-sm);
       height: 38px;
+      min-width: 92px;
       font-family: inherit;
       font-size: 13px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
-      transition: opacity 0.15s;
+      transition: opacity 0.15s, transform .1s;
       display: flex;
       align-items: center;
       justify-content: center;
     }
     .row-bet-btn:hover { opacity: 0.88; }
+    .row-bet-btn:active { transform: scale(.97); }
     .row-bet-btn.yes {
       background: rgba(0, 170, 108, 0.1);
       border: 1px solid var(--yes-green);
@@ -602,6 +608,11 @@
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1c1e28; border: 1px solid var(--border); color: var(--text-primary); font-size: 13px; padding: 10px 20px; border-radius: 20px; z-index: 300; transition: transform .3s ease; pointer-events: none; white-space: nowrap; }
     #fund-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.66); z-index: 400; align-items: center; justify-content: center; padding: 20px; }
     #fund-modal-overlay.show { display: flex; }
+    .pmh-header, .pmh-row { display: grid; grid-template-columns: 1.4fr 1fr 1.6fr 1fr 1fr; gap: 12px; align-items: center; }
+    .pmh-header { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); font-weight: 600; padding: 8px 4px; border-bottom: 1px solid var(--border); }
+    .pmh-row { font-size: 13px; color: var(--text-secondary); padding: 12px 4px; border-bottom: 1px solid var(--border); }
+    .pmh-row:last-child { border-bottom: none; }
+    @media (max-width: 640px) { .pmh-header span:nth-child(2), .pmh-row span:nth-child(2) { display:none; } }
     #fund-modal { position: relative; width: 100%; max-width: 440px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 26px 24px 22px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
     .fund-modal-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); font-size: 26px; line-height: 1; cursor: pointer; }
     .fund-modal-close:hover { color: var(--text-primary); }
@@ -856,18 +867,40 @@
           </div>
           <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; display: flex; flex-direction: column; gap: 12px;">
             <p>
-              This market resolves to "Yes" for the specific bracket that matches the live viewer count fetched during the final minute of the specified betting hour. All other brackets within this event will resolve to "No".
+              Each market is a <strong>parimutuel pool</strong> on the streamer's concurrent viewer count. You stake USDC on one of nine viewer brackets. When the market settles, everyone who picked the winning bracket splits the entire pool in proportion to their stake, minus a 2% fee. Odds shown are an estimate from the current pool and shift as more bets come in.
             </p>
             <p>
-              <strong>Anti-Fraud Termination Clause:</strong> If the streamer ends the broadcast unexpectedly or goes completely offline prior to the final 15 minutes of the designated betting hour, this market will be declared <strong>Void</strong>. All placed bets will be automatically invalidated, and 100% of the collateral principal will be unlocked for direct wallet refund withdrawals. Streamers are blocked from force-closing markets they trade in.
+              <strong>Settlement:</strong> after betting closes, an automated oracle samples the live viewer count once per minute over a sampling window. The market resolves to the bracket containing the <strong>trimmed mean</strong> of those samples (extreme high/low samples are discarded to resist manipulation). Winnings unlock after a short challenge window.
             </p>
             <p>
-              <strong>Resolution Source:</strong> The sole resolution source for this market is the official channel metrics verified via the platform's automated architecture proxy routing at <code style="color: var(--green-text); background: var(--bg-base); padding: 2px 6px; border-radius: 4px; font-size: 11px;">blue-unit-891d.apetersen280.workers.dev</code>. Alternate tracking sites or personal stream screenshots are not recognized for market settlement.
+              <strong>Void &amp; refunds:</strong> if the stream goes offline before enough samples are collected, or no one bet the winning bracket, the market is declared <strong>Void</strong> and every staker can reclaim their full stake. Streamers cannot force-close or settle markets.
+            </p>
+            <p>
+              <strong>Per-wallet cap:</strong> each wallet can stake at most 50 USDC per market.
             </p>
             <div style="margin-top: 6px; font-size: 11px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 16px;">
-              <span><strong>Oracle Address:</strong> <span style="color: var(--polygon-purple); word-break: break-all;">0xB4815458f9Ca870a0bbe9d15c2AA33F814fEE7fA</span></span>
-              <span><strong>Collateral asset:</strong> USDC (Polygon)</span>
+              <span><strong>Network:</strong> <span style="color: var(--polygon-purple);">Polygon Amoy (testnet)</span></span>
+              <span><strong>Collateral:</strong> test USDC</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Historical markets for this streamer -->
+      <div class="market-rules-block" style="grid-column: 1 / -1;">
+        <div style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);">
+          <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px;">
+            Past Markets
+          </div>
+          <div class="pmh-header">
+            <span>Date</span>
+            <span>Anchor</span>
+            <span>Winning bracket</span>
+            <span>Pool</span>
+            <span style="text-align:right;">Result</span>
+          </div>
+          <div id="streamer-history-rows">
+            <div style="padding:18px 4px; color: var(--text-muted); font-size:13px;">Loading past markets…</div>
           </div>
         </div>
       </div>
@@ -1716,21 +1749,27 @@
     container.innerHTML = labels.map(function(lab, i) {
       return '<div class="bucket-row-item skeleton-row" id="card-b' + i + '">' +
         '<span class="bucket-row-title">' + lab + '</span>' +
-        '<span class="bucket-row-volume" id="vol-b' + i + '"><span class="skel" style="width:90px;height:13px;">·</span></span>' +
-        '<button class="row-bet-btn yes" id="btn-bet-b' + i + '" disabled><span class="skel" style="width:46px;height:14px;">·</span></button>' +
+        '<div class="bucket-row-meta">' +
+          '<div class="bucket-row-volume" id="vol-b' + i + '"><span>Pool —</span><span class="bv-odds">—</span></div>' +
+          '<div class="bucket-pool-bar"><span id="bar-b' + i + '" style="width:0%"></span></div>' +
+        '</div>' +
+        '<button class="row-bet-btn yes" id="btn-bet-b' + i + '" disabled>Bet</button>' +
         '</div>';
     }).join('');
 
     const infoMap = {};
+    const maxPool = Math.max(0.0001, ...poolUsd);
     labels.forEach(function(lab, i) {
-      const share = totalPoolUsd > 0 ? (poolUsd[i] / totalPoolUsd) : 0;
       // Parimutuel "odds": if this bracket wins, payout multiple ≈ totalPool / bracketPool
       // (minus the 2% fee). Shown as e.g. "2.4x". If empty, show "—".
       const mult = poolUsd[i] > 0 ? (totalPoolUsd / poolUsd[i]) * 0.98 : 0;
       infoMap['b' + i] = { idx: i, label: lab, poolUsd: poolUsd[i], mult: mult };
       const volEl = document.getElementById('vol-b' + i);
+      const barEl = document.getElementById('bar-b' + i);
       const betBtn = document.getElementById('btn-bet-b' + i);
-      if (volEl) volEl.textContent = 'Pool: $' + poolUsd[i].toFixed(2) + (mult > 0 ? '  ·  ' + mult.toFixed(2) + 'x' : '');
+      if (volEl) volEl.innerHTML = '<span>Pool $' + poolUsd[i].toFixed(2) + '</span>' +
+        '<span class="bv-odds">' + (mult > 0 ? mult.toFixed(2) + 'x' : '—') + '</span>';
+      if (barEl) barEl.style.width = ((poolUsd[i] / maxPool) * 100).toFixed(1) + '%';
       if (betBtn) {
         betBtn.disabled = false;
         betBtn.textContent = 'Bet';
@@ -2138,8 +2177,65 @@
     updatePlayerMeta(username);
     renderSidebar();
     loadMarketLayout(username);
+    loadStreamerHistory(username);
     startTimelineClocks();
     window.scrollTo(0, 0);
+  }
+
+  // Load all past markets for this streamer (from worker /history + on-chain reads).
+  async function loadStreamerHistory(username) {
+    const el = document.getElementById('streamer-history-rows');
+    if (!el) return;
+    el.innerHTML = '<div style="padding:18px 4px; color: var(--text-muted); font-size:13px;">Loading past markets…</div>';
+    try {
+      const hres = await fetch(WORKER_URL.replace(/\/$/, '') + '/history', { cache: 'no-store' });
+      const hjson = await hres.json();
+      const markets = hjson.markets || {};
+      // ids belonging to this streamer, newest first
+      const ids = Object.keys(markets)
+        .filter(id => markets[id].streamer === username)
+        .sort((a, b) => Number(b) - Number(a));
+      if (!ids.length) {
+        el.innerHTML = '<div style="padding:18px 4px; color: var(--text-muted); font-size:13px;">No past markets for this streamer yet. Completed markets will appear here.</div>';
+        return;
+      }
+      const contract = await getReadContract();
+      const rows = await Promise.all(ids.slice(0, 25).map(async function(id) {
+        let mkt, thresholds;
+        try {
+          [mkt, thresholds] = await Promise.all([
+            contract.getMarket(id),
+            contract.getThresholds(id).catch(() => null)
+          ]);
+        } catch (e) { return ''; }
+        const status = Number(mkt.status);
+        const labels = thresholds ? bracketLabelsFromThresholds(thresholds) : null;
+        const dateStr = markets[id].openTime
+          ? new Date(markets[id].openTime * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : '—';
+        const anchor = Number(mkt.anchorViewers).toLocaleString();
+        const poolUsd = (Number(mkt.totalPool) / 1e6).toFixed(2);
+        let winText, winColor, resultText, resultColor;
+        if (status === MKT.Active)      { winText = 'In progress'; winColor='var(--text-muted)'; resultText='Open'; resultColor='var(--text-secondary)'; }
+        else if (status === MKT.Voided) { winText = '—'; winColor='var(--text-muted)'; resultText='Voided'; resultColor='#f5a623'; }
+        else {
+          winText = labels ? labels[Number(mkt.winningBracket)] : ('Bracket ' + Number(mkt.winningBracket));
+          winColor = 'var(--text-primary)'; resultText = 'Settled'; resultColor = 'var(--green-text,#1ec77a)';
+        }
+        return '<div class="pmh-row">' +
+          '<span>' + dateStr + '</span>' +
+          '<span>' + anchor + '</span>' +
+          '<span style="color:' + winColor + ';font-weight:600;">' + winText + '</span>' +
+          '<span>$' + poolUsd + '</span>' +
+          '<span style="text-align:right;color:' + resultColor + ';font-weight:600;">' + resultText + '</span>' +
+        '</div>';
+      }));
+      const html = rows.filter(Boolean).join('');
+      el.innerHTML = html || '<div style="padding:18px 4px; color: var(--text-muted); font-size:13px;">No past markets yet.</div>';
+    } catch (e) {
+      console.error('streamer history load failed', e);
+      el.innerHTML = '<div style="padding:18px 4px; color: var(--text-muted); font-size:13px;">Could not load past markets.</div>';
+    }
   }
 
   function showBlocked(username) {
