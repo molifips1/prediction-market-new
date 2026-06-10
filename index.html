@@ -680,6 +680,10 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
       <span class="btn-label">My Bets</span>
     </button>
+    <button id="add-funds-btn" class="nav-portfolio-btn" onclick="openFundModal()" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+      <span class="btn-label">Add Funds</span>
+    </button>
     <button id="wallet-btn" class="nav-wallet-btn" onclick="connectWallet()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3"/></svg>
       <span id="wallet-btn-text">Connect Wallet</span>
@@ -1122,12 +1126,15 @@
   function updateWalletUI() {
     const btnText = document.getElementById('wallet-btn-text');
     const btn = document.getElementById('wallet-btn');
+    const addFunds = document.getElementById('add-funds-btn');
     if (userWalletAddress) {
       btnText.textContent = `${userWalletAddress.slice(0, 6)}...${userWalletAddress.slice(-4)}`;
       if (btn) btn.classList.add('connected');
+      if (addFunds) addFunds.style.display = '';
     } else {
       btnText.textContent = "Connect Wallet";
       if (btn) btn.classList.remove('connected');
+      if (addFunds) addFunds.style.display = 'none';
     }
   }
 
