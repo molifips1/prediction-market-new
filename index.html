@@ -421,6 +421,10 @@
     .market-right-sticky-panel {
       position: sticky;
       top: calc(var(--nav-h) + 24px);
+      grid-column: 2;
+      grid-row: 1 / 99;
+      align-self: start;
+      z-index: 1;
     }
     .order-slip-card {
       background: var(--bg-card);
@@ -622,30 +626,31 @@
     .pmh-row:last-child { border-bottom: none; }
     .market-live-info { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
     .player-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--border); }
-    .mli-viewers { display: flex; align-items: center; gap: 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
-    .mli-live-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: .08em; color: #ff5a5f; background: rgba(255,90,95,.12); border-radius: 6px; padding: 5px 9px; flex: 0 0 auto; }
-    .mli-live-tag .lv-dot { width: 7px; height: 7px; }
-    .mli-viewers-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-    .mli-count { font-size: 30px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.6px; font-variant-numeric: tabular-nums; }
-    .mli-label { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: .01em; }
+    .mli-viewers { display: flex; align-items: center; gap: 11px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; }
+    .mli-viewers .lv-dot { width: 9px; height: 9px; flex: 0 0 auto; }
+    .mli-viewers-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .mli-count { font-size: 26px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+    .mli-label { font-size: 11px; font-weight: 600; color: var(--text-muted); }
     .mli-timing { display: flex; gap: 8px; flex-wrap: wrap; }
     .mli-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; padding: 7px 11px; font-size: 12px; font-weight: 700; }
     .mli-chip svg { width: 13px; height: 13px; }
     #mli-betting { background: rgba(74,158,255,.12); border: 1px solid rgba(74,158,255,.45); color: #4a9eff; }
     #mli-settle { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary); }
     @media (max-width: 640px) { .pmh-header span:nth-child(2), .pmh-row span:nth-child(2) { display:none; } }
-    .cmt-composer { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
-    .cmt-name-input { background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--text-primary); font-family: inherit; font-size: 13px; max-width: 220px; }
-    .cmt-input-row { display: flex; gap: 8px; align-items: stretch; }
-    .cmt-body-input { flex: 1; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text-primary); font-family: inherit; font-size: 14px; resize: vertical; min-height: 42px; }
+    .cmt-composer { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+    .cmt-name-input { background: var(--bg-input); border: 1px solid var(--border); border-radius: 999px; padding: 0 14px; height: 42px; color: var(--text-primary); font-family: inherit; font-size: 13px; width: 130px; flex: 0 0 auto; }
+    .cmt-input-row { display: flex; gap: 8px; align-items: center; }
+    .cmt-body-input { flex: 1; min-width: 0; background: var(--bg-input); border: 1px solid var(--border); border-radius: 999px; padding: 0 16px; height: 42px; color: var(--text-primary); font-family: inherit; font-size: 14px; }
     .cmt-name-input:focus, .cmt-body-input:focus { outline: none; border-color: var(--polygon-purple, #7b3fe4); }
-    .cmt-post-btn { background: var(--polygon-purple, #7b3fe4); color: #fff; border: none; border-radius: 8px; padding: 0 22px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; flex: 0 0 auto; }
+    .cmt-post-btn { background: var(--polygon-purple, #7b3fe4); color: #fff; border: none; border-radius: 999px; padding: 0 22px; height: 42px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; flex: 0 0 auto; }
     .cmt-post-btn:hover { opacity: .9; }
     .cmt-post-btn:disabled { opacity: .5; cursor: default; }
-    .cmt-error { font-size: 12px; color: #e5484d; min-height: 0; }
-    .cmt-list { display: flex; flex-direction: column; gap: 14px; }
-    .cmt-item { display: flex; flex-direction: column; gap: 3px; padding-bottom: 13px; border-bottom: 1px solid var(--border); }
+    .cmt-error { font-size: 12px; color: #e5484d; min-height: 0; padding-left: 4px; }
+    .cmt-list { display: flex; flex-direction: column; gap: 16px; }
+    .cmt-item { display: flex; gap: 11px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
     .cmt-item:last-child { border-bottom: none; }
+    .cmt-avatar { width: 34px; height: 34px; border-radius: 50%; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; }
+    .cmt-item-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
     .cmt-item-head { display: flex; align-items: baseline; gap: 8px; }
     .cmt-author { font-size: 13px; font-weight: 700; color: var(--text-primary); }
     .cmt-author.wallet { color: #b794f6; font-family: monospace; font-weight: 600; }
@@ -885,9 +890,11 @@
       <div class="market-right-sticky-panel">
         <div class="market-live-info" id="market-live-info">
           <div class="mli-viewers">
-            <svg class="mli-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            <span class="mli-count" id="mli-viewers-count">0</span>
-            <span class="mli-live"><span class="lv-dot"></span>live now</span>
+            <span class="lv-dot"></span>
+            <div class="mli-viewers-main">
+              <span class="mli-count" id="mli-viewers-count">0</span>
+              <span class="mli-label">watching live</span>
+            </div>
           </div>
           <div class="mli-timing">
             <div class="mli-chip" id="mli-betting"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span id="mli-betting-text">—</span></div>
@@ -931,7 +938,7 @@
       </div>
 
       <!-- Historical markets for this streamer -->
-      <div class="market-rules-block" style="grid-column: 1 / -1;">
+      <div class="market-rules-block" style="grid-column: 1;">
         <div style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);">
           <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px;">
             Past Markets
@@ -950,15 +957,15 @@
       </div>
 
       <!-- Comments -->
-      <div class="market-rules-block" style="grid-column: 1 / -1;">
+      <div class="market-rules-block" style="grid-column: 1;">
         <div style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);">
           <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 6px; display:flex; align-items:center; gap:8px;">
             Comments <span id="cmt-count" style="color: var(--text-muted); font-weight:400; font-size:12px;"></span>
           </div>
           <div class="cmt-composer">
-            <input type="text" id="cmt-name" class="cmt-name-input" placeholder="Name (optional)" maxlength="40" />
             <div class="cmt-input-row">
-              <textarea id="cmt-body" class="cmt-body-input" placeholder="Add a comment…" maxlength="500" rows="2"></textarea>
+              <input type="text" id="cmt-name" class="cmt-name-input" placeholder="Name" maxlength="40" />
+              <input type="text" id="cmt-body" class="cmt-body-input" placeholder="Add a comment…" maxlength="500" onkeydown="if(event.key==='Enter')postComment()" />
               <button id="cmt-post-btn" class="cmt-post-btn" onclick="postComment()">Post</button>
             </div>
             <div id="cmt-error" class="cmt-error"></div>
@@ -2294,12 +2301,19 @@
       }
       listEl.innerHTML = data.map(function(c) {
         const isWallet = /^0x[a-fA-F0-9]{4}…[a-fA-F0-9]{4}$/.test(c.author);
+        const initial = (c.author || '?').replace(/^0x/, '').charAt(0).toUpperCase();
+        const colors = ['#7b3fe4','#1ec77a','#4a9eff','#e5484d','#f5a623','#d4537e','#1d9e75'];
+        let hash = 0; for (let k = 0; k < c.author.length; k++) hash = c.author.charCodeAt(k) + ((hash << 5) - hash);
+        const color = colors[Math.abs(hash) % colors.length];
         return '<div class="cmt-item">' +
-          '<div class="cmt-item-head">' +
-            '<span class="cmt-author' + (isWallet ? ' wallet' : '') + '">' + escapeHtml(c.author) + '</span>' +
-            '<span class="cmt-time">' + cmtTimeAgo(c.created_at) + '</span>' +
+          '<div class="cmt-avatar" style="background:' + color + ';">' + escapeHtml(initial) + '</div>' +
+          '<div class="cmt-item-body">' +
+            '<div class="cmt-item-head">' +
+              '<span class="cmt-author' + (isWallet ? ' wallet' : '') + '">' + escapeHtml(c.author) + '</span>' +
+              '<span class="cmt-time">' + cmtTimeAgo(c.created_at) + '</span>' +
+            '</div>' +
+            '<div class="cmt-body-text">' + escapeHtml(c.body) + '</div>' +
           '</div>' +
-          '<div class="cmt-body-text">' + escapeHtml(c.body) + '</div>' +
         '</div>';
       }).join('');
     } catch (e) {
