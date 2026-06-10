@@ -621,10 +621,12 @@
     .pmh-row:last-child { border-bottom: none; }
     .market-live-info { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
     .player-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--border); }
-    .mli-viewers { display: flex; align-items: center; gap: 9px; background: rgba(229,72,77,.08); border: 1px solid rgba(229,72,77,.25); border-radius: 10px; padding: 8px 12px; }
-    .mli-viewers .lv-dot { width: 10px; height: 10px; align-self: center; }
-    .mli-count { font-size: 27px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
-    .mli-label { font-size: 10px; font-weight: 700; color: #ff7a7d; text-transform: uppercase; letter-spacing: .06em; }
+    .mli-viewers { display: flex; align-items: center; gap: 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .mli-live-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: .08em; color: #ff5a5f; background: rgba(255,90,95,.12); border-radius: 6px; padding: 5px 9px; flex: 0 0 auto; }
+    .mli-live-tag .lv-dot { width: 7px; height: 7px; }
+    .mli-viewers-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .mli-count { font-size: 30px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.6px; font-variant-numeric: tabular-nums; }
+    .mli-label { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: .01em; }
     .mli-timing { display: flex; gap: 8px; flex-wrap: wrap; }
     .mli-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; padding: 7px 11px; font-size: 12px; font-weight: 700; }
     .mli-chip svg { width: 13px; height: 13px; }
@@ -865,9 +867,11 @@
       <div class="market-right-sticky-panel">
         <div class="market-live-info" id="market-live-info">
           <div class="mli-viewers">
-            <span class="lv-dot"></span>
-            <span class="mli-count" id="mli-viewers-count">0</span>
-            <span class="mli-label">watching now</span>
+            <div class="mli-live-tag"><span class="lv-dot"></span>LIVE</div>
+            <div class="mli-viewers-main">
+              <span class="mli-count" id="mli-viewers-count">0</span>
+              <span class="mli-label">viewers watching now</span>
+            </div>
           </div>
           <div class="mli-timing">
             <div class="mli-chip" id="mli-betting"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span id="mli-betting-text">—</span></div>
