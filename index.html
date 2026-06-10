@@ -1377,22 +1377,19 @@
         } catch (e) { return null; }
 
         const status = Number(mkt.status);
-        const stakedUsd = (Number(stakedAmt) / 1e6).toFixed(2);
         const claimableUsd = (Number(claimable) / 1e6).toFixed(2);
         const labels = thresholds ? bracketLabelsFromThresholds(thresholds) : null;
         const winBracket = Number(mkt.winningBracket);
         const winLabel = (status === MKT.Settled && labels) ? labels[winBracket] : null;
 
-        // Which bracket(s) did this user back? Scan stakeOf across the 9 brackets.
+        // Per-bracket stakes — each becomes its own row.
         const stakeByBracket = await Promise.all(
           Array.from({length: NUM_BRACKETS}, (_, b) =>
             contract.stakeOf(id, b, userWalletAddress).catch(() => 0n))
         );
-        const pickedIdxs = [];
-        stakeByBracket.forEach((s, b) => { if (s > 0n) pickedIdxs.push(b); });
-        const pickLabel = (labels && pickedIdxs.length)
-          ? pickedIdxs.map(b => labels[b]).join(', ')
-          : (pickedIdxs.length ? pickedIdxs.map(b => 'Bracket ' + b).join(', ') : '—');
+        const picks = [];
+        stakeByBracket.forEach((s, b) => { if (s > 0n) picks.push({ b, stake: Number(s) / 1e6 }); });
+        if (!picks.length) return null;
 
         // Streamer name + date from the worker history map (new markets only).
         const h = histMap[id];
@@ -1403,51 +1400,66 @@
           ? new Date(h.openTime * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
           : '—';
 
-        // Outcome of the user's bet.
-        let outcomeText, outcomeColor;
-        if (status === MKT.Active) {
-          outcomeText = 'In play'; outcomeColor = 'var(--text-secondary)';
-        } else if (status === MKT.Voided) {
-          outcomeText = 'Voided'; outcomeColor = '#f5a623';
-        } else {
-          const won = pickedIdxs.includes(winBracket);
-          outcomeText = won ? ('Won · ' + (winLabel || '')) : ('Lost · won: ' + (winLabel || '?'));
-          outcomeColor = won ? 'var(--green-text)' : 'var(--text-muted)';
-        }
-
-        // Status of the bet (settlement state).
+        // Status text per market (same for each of its rows).
         let statusText, statusColor;
         if (status === MKT.Active)       { statusText = 'Open'; statusColor = 'var(--text-secondary)'; }
         else if (status === MKT.Settled) { statusText = 'Resolved'; statusColor = 'var(--green-text)'; }
         else                             { statusText = 'Refundable'; statusColor = '#f5a623'; }
 
         const canClaim = !alreadyClaimed && claimable > 0n && (status === MKT.Settled || status === MKT.Voided);
-        const claimBtn = alreadyClaimed
-          ? '<button class="claim-btn" disabled>Claimed</button>'
-          : (canClaim
-              ? '<button class="claim-btn" data-id="' + id + '" onclick="claimOnChainBtn(this)">Claim $' + claimableUsd + '</button>'
-              : '<button class="claim-btn" disabled>' + (status === MKT.Active ? 'In play' : 'Nothing to claim') + '</button>');
 
-        const rowHtml = '<div class="portfolio-data-row">' +
-          '<span style="font-weight:600;color:#fff;">' + streamer + '</span>' +
-          '<span style="color:var(--text-secondary);">' + dateStr + '</span>' +
-          '<span>' + pickLabel + '</span>' +
-          '<span style="color:' + outcomeColor + ';font-weight:500;">' + outcomeText + '</span>' +
-          '<span>$' + stakedUsd + '</span>' +
-          '<span style="color:' + statusColor + ';font-weight:500;">' + statusText + '</span>' +
-          '<div style="text-align:right;">' + claimBtn + '</div>' +
-        '</div>';
+        // Build one row object per picked bracket.
+        const marketRows = picks.map(function(pick, rowIdx) {
+          const pickLabel = labels ? labels[pick.b] : ('Bracket ' + pick.b);
 
-        return {
-          id, status, rowHtml,
-          stake: Number(stakedAmt) / 1e6,
-          claimable: Number(claimable) / 1e6,
-          won: (status === MKT.Settled && pickedIdxs.includes(winBracket)),
-          alreadyClaimed
-        };
+          // Outcome for THIS bracket.
+          let outcomeText, outcomeColor;
+          if (status === MKT.Active) {
+            outcomeText = 'In play'; outcomeColor = 'var(--text-secondary)';
+          } else if (status === MKT.Voided) {
+            outcomeText = 'Refunded'; outcomeColor = '#f5a623';
+          } else {
+            const won = (pick.b === winBracket);
+            outcomeText = won ? ('Won · ' + (winLabel || '')) : 'Lost';
+            outcomeColor = won ? 'var(--green-text)' : 'var(--text-muted)';
+          }
+
+          // Claim button only on the first row of a market (claim resolves the
+          // whole market at once); other rows show a muted marker.
+          let actionHtml;
+          if (rowIdx === 0) {
+            actionHtml = alreadyClaimed
+              ? '<button class="claim-btn" disabled>Claimed</button>'
+              : (canClaim
+                  ? '<button class="claim-btn" data-id="' + id + '" onclick="claimOnChainBtn(this)">Claim $' + claimableUsd + '</button>'
+                  : '<button class="claim-btn" disabled>' + (status === MKT.Active ? 'In play' : 'Nothing to claim') + '</button>');
+          } else {
+            actionHtml = '<span style="color:var(--text-muted);font-size:11px;">same market ↑</span>';
+          }
+
+          const rowHtml = '<div class="portfolio-data-row">' +
+            '<span style="font-weight:600;color:#fff;">' + streamer + '</span>' +
+            '<span style="color:var(--text-secondary);">' + dateStr + '</span>' +
+            '<span>' + pickLabel + '</span>' +
+            '<span style="color:' + outcomeColor + ';font-weight:500;">' + outcomeText + '</span>' +
+            '<span>$' + pick.stake.toFixed(2) + '</span>' +
+            '<span style="color:' + statusColor + ';font-weight:500;">' + statusText + '</span>' +
+            '<div style="text-align:right;">' + actionHtml + '</div>' +
+          '</div>';
+
+          return {
+            id, status, rowHtml,
+            stake: pick.stake,
+            claimable: rowIdx === 0 ? (Number(claimable) / 1e6) : 0,
+            won: (status === MKT.Settled && pick.b === winBracket),
+            alreadyClaimed
+          };
+        });
+
+        return marketRows;
       }));
 
-      const rowsArr = built.filter(Boolean);
+      const rowsArr = built.filter(Boolean).flat();
 
       // ---- summary card totals ----
       let openStake = 0, claimableTotal = 0, resolvedPnl = 0;
