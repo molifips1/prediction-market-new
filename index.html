@@ -148,6 +148,20 @@
     .filter-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
     .filter-btn.active { background: var(--green); border-color: var(--green); color: #0a0b0e; font-weight: 600; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    .category-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+    .category-card { position: relative; border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; border: 1px solid var(--border); transition: transform .15s, border-color .2s; background: var(--bg-card); }
+    .category-card:hover { transform: translateY(-3px); border-color: var(--polygon-purple, #7b3fe4); }
+    .category-card.soon { cursor: default; }
+    .category-card.soon:hover { transform: none; border-color: var(--border); }
+    .category-art { height: 200px; display: flex; align-items: flex-end; padding: 18px; position: relative; }
+    .category-art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.55), transparent 55%); }
+    .category-art-label { position: relative; z-index: 1; font-size: 30px; font-weight: 800; color: #fff; letter-spacing: -0.5px; text-shadow: 0 2px 12px rgba(0,0,0,.4); }
+    .category-soon-badge { position: absolute; top: 14px; right: 14px; z-index: 2; background: rgba(0,0,0,.55); color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .06em; padding: 5px 10px; border-radius: 6px; text-transform: uppercase; }
+    .category-body { padding: 14px 16px; }
+    .category-name { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+    .category-meta { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
+    .category-tags { display: flex; gap: 8px; }
+    .category-tag { font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-input); border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px; }
 
     /* PORTFOLIO DASHBOARD VIEW */
     #portfolio-view { display: none; flex: 1; margin-left: var(--sidebar-w); padding: 28px 28px 40px; min-width: 0; }
@@ -736,7 +750,7 @@
   <button class="nav-hamburger" onclick="toggleSidebar()" aria-label="Menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
-  <div class="nav-logo" onclick="goHome()">
+  <div class="nav-logo" onclick="goLanding()">
     <img src="https://raw.githubusercontent.com/molifips1/prediction-market-new/main/StreamSlush-logo1.png" alt="StreamSlush" class="nav-logo-img" />
   </div>
   <div class="nav-search" id="nav-search">
@@ -776,15 +790,30 @@
   <aside id="sidebar"></aside>
 
   <main id="main-view">
-    <div class="page-header">
-      <h1 class="page-title">Following <span id="live-count"></span></h1>
+    <!-- Category landing (shown first) -->
+    <div id="category-landing">
+      <div class="page-header">
+        <h1 class="page-title">Live Categories</h1>
+      </div>
+      <div class="category-grid" id="category-grid"></div>
     </div>
-    <div class="filter-bar">
-      <button class="filter-btn" onclick="setFilter('all', this)">All</button>
-      <button class="filter-btn active" onclick="setFilter('live', this)">Live</button>
-      <button class="filter-btn" onclick="setFilter('offline', this)">Offline</button>
+
+    <!-- Streamers within a chosen category -->
+    <div id="category-streamers" style="display:none;">
+      <div class="page-header" style="display:flex; align-items:center; gap:14px;">
+        <button class="player-back" onclick="showCategoryLanding()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+          Categories
+        </button>
+        <h1 class="page-title" style="margin:0;" id="category-title">Category <span id="live-count"></span></h1>
+      </div>
+      <div class="filter-bar">
+        <button class="filter-btn" onclick="setFilter('all', this)">All</button>
+        <button class="filter-btn active" onclick="setFilter('live', this)">Live</button>
+        <button class="filter-btn" onclick="setFilter('offline', this)">Offline</button>
+      </div>
+      <div class="grid" id="grid"></div>
     </div>
-    <div class="grid" id="grid"></div>
   </main>
 
   <div id="portfolio-view">
@@ -1160,24 +1189,33 @@
   }
 
 
-  let streamers = JSON.parse(localStorage.getItem('mykick_streamers') || 'null') || [
-    { username: 'haddzy',       display: 'Haddzy' },
-    { username: 'kyrza',       display: 'KYRZA' },
-    { username: 'donkasjo',       display: 'DonKasjo' },
-    { username: 'esa',       display: 'esA' },
-    { username: 'nadeshot',       display: 'Nadeshot' },
-    { username: 'plohoyparen',       display: 'plohoyparen' },
-    { username: 'magicaldota',       display: 'magicaldota' },
-    { username: 'trainwreckstv', display: 'Trainwreckstv' },
-    { username: 'sweetflips',       display: 'SweetFlips' },
-    { username: 'classybeef',       display: 'ClassyBeef' },
-    { username: 'thedoctor',       display: 'TheDoctor' },
-    { username: 'auslots',       display: 'auslots' },
-    { username: 'generalqw77',       display: 'generalqw77' },
-    { username: 'roshtein',       display: 'roshtein' },
-    { username: 'maherco',       display: 'maherco' },
-    { username: 'kyootbot',      display: 'Kyootbot' }
+  let streamers = (JSON.parse(localStorage.getItem('mykick_streamers') || 'null') || [
+    { username: 'haddzy',       display: 'Haddzy',        category: 'casino' },
+    { username: 'kyrza',       display: 'KYRZA',          category: 'casino' },
+    { username: 'donkasjo',       display: 'DonKasjo',    category: 'casino' },
+    { username: 'esa',       display: 'esA',              category: 'casino' },
+    { username: 'nadeshot',       display: 'Nadeshot',    category: 'casino' },
+    { username: 'plohoyparen',       display: 'plohoyparen', category: 'casino' },
+    { username: 'magicaldota',       display: 'magicaldota', category: 'casino' },
+    { username: 'trainwreckstv', display: 'Trainwreckstv', category: 'casino' },
+    { username: 'sweetflips',       display: 'SweetFlips', category: 'casino' },
+    { username: 'classybeef',       display: 'ClassyBeef', category: 'casino' },
+    { username: 'thedoctor',       display: 'TheDoctor',  category: 'casino' },
+    { username: 'auslots',       display: 'auslots',      category: 'casino' },
+    { username: 'generalqw77',       display: 'generalqw77', category: 'casino' },
+    { username: 'roshtein',       display: 'roshtein',    category: 'casino' },
+    { username: 'maherco',       display: 'maherco',      category: 'casino' },
+    { username: 'kyootbot',      display: 'Kyootbot',     category: 'casino' }
+  ]).map(s => ({ ...s, category: s.category || 'casino' }));
+
+  // Category definitions. Casino is live; Chess is a coming-soon placeholder.
+  const CATEGORIES = [
+    { id: 'casino', name: 'Casino & Slots', tag1: 'Slots', tag2: 'Live', comingSoon: false,
+      art: 'linear-gradient(135deg,#7b3fe4,#3a1d6e)' },
+    { id: 'chess',  name: 'Chess', tag1: 'Strategy', tag2: 'Soon', comingSoon: true,
+      art: 'linear-gradient(135deg,#1ec77a,#0d5c3a)' }
   ];
+  let currentCategory = null; // null = showing category landing
   let data = {};
   let filter = 'live';
   let searchQ = '';
@@ -2138,13 +2176,57 @@
   function initials(name) { return name.slice(0,2).toUpperCase(); }
 
   /* RENDER */
-  function render() { renderGrid(); renderSidebar(); renderLiveCount(); }
+  function render() { renderCategoryGrid(); renderGrid(); renderSidebar(); renderLiveCount(); }
+
+  function renderCategoryGrid() {
+    const grid = document.getElementById('category-grid');
+    if (!grid) return;
+    grid.innerHTML = CATEGORIES.map(function(cat) {
+      const count = streamers.filter(s => s.category === cat.id).length;
+      const liveCount = streamers.filter(s => s.category === cat.id && data[s.username]?.isLive).length;
+      const meta = cat.comingSoon
+        ? 'Coming soon'
+        : (liveCount > 0 ? liveCount + ' live now · ' + count + ' streamers' : count + ' streamers');
+      return '<div class="category-card' + (cat.comingSoon ? ' soon' : '') + '"' +
+        (cat.comingSoon ? '' : ' onclick="openCategory(\'' + cat.id + '\')"') + '>' +
+        '<div class="category-art" style="background:' + cat.art + ';">' +
+          (cat.comingSoon ? '<span class="category-soon-badge">Coming soon</span>' : '') +
+          '<span class="category-art-label">' + cat.name + '</span>' +
+        '</div>' +
+        '<div class="category-body">' +
+          '<div class="category-name">' + cat.name + '</div>' +
+          '<div class="category-meta">' + meta + '</div>' +
+          '<div class="category-tags"><span class="category-tag">' + cat.tag1 + '</span><span class="category-tag">' + cat.tag2 + '</span></div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function openCategory(id) {
+    currentCategory = id;
+    const cat = CATEGORIES.find(c => c.id === id);
+    document.getElementById('category-landing').style.display = 'none';
+    document.getElementById('category-streamers').style.display = 'block';
+    const titleEl = document.getElementById('category-title');
+    if (titleEl) titleEl.innerHTML = (cat ? cat.name : 'Category') + ' <span id="live-count"></span>';
+    renderGrid(); renderSidebar(); renderLiveCount();
+    window.scrollTo(0, 0);
+  }
+
+  function showCategoryLanding() {
+    currentCategory = null;
+    document.getElementById('category-streamers').style.display = 'none';
+    document.getElementById('category-landing').style.display = 'block';
+    renderCategoryGrid(); renderSidebar();
+    window.scrollTo(0, 0);
+  }
 
   function visible(s) {
     const d = data[s.username];
+    const matchCategory = !currentCategory || s.category === currentCategory;
     const matchFilter = filter === 'all' || (filter === 'live' && d?.isLive) || (filter === 'offline' && !d?.isLive);
     const matchSearch = !searchQ || s.username.includes(searchQ) || (d?.displayName || '').toLowerCase().includes(searchQ);
-    return matchFilter && matchSearch;
+    return matchCategory && matchFilter && matchSearch;
   }
 
   function renderGrid() {
@@ -2223,22 +2305,36 @@
 
   function renderSidebar() {
     const sb = document.getElementById('sidebar');
-    const sorted = [...streamers].sort((a, b) => (data[b.username]?.isLive ? 1 : 0) - (data[a.username]?.isLive ? 1 : 0));
-    sb.innerHTML = `<div class="sidebar-section-label">Streamers</div>` +
-      sorted.map(s => {
-        const d = data[s.username];
-        const isLive = d?.isLive;
-        const name = d?.displayName || s.display;
-        const ini = initials(name);
-        const isActive = currentPlayer === s.username;
-        return `<div class="sidebar-item${isActive ? ' active' : ''}" onclick="openPlayer('${s.username}')">
-          <div class="sidebar-avatar">
-            ${d?.avatar ? `<img src="${d.avatar}" alt="${name}" onerror="this.style.display='none';this.parentNode.innerText='${ini}'"/>` : ini}
-          </div>
-          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${name}</span>
-          ${isLive ? `<span class="sidebar-viewers">${fv(d.viewers)}</span><span class="live-dot"></span>` : `<span class="live-dot hidden"></span>`}
-        </div>`;
-      }).join('');
+    let html = '';
+    CATEGORIES.forEach(function(cat) {
+      const inCat = streamers.filter(s => s.category === cat.id);
+      // Sort live-first within the category.
+      const sorted = [...inCat].sort((a, b) => (data[b.username]?.isLive ? 1 : 0) - (data[a.username]?.isLive ? 1 : 0));
+      const liveCount = inCat.filter(s => data[s.username]?.isLive).length;
+      html += `<div class="sidebar-section-label" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="${cat.comingSoon ? '' : `openCategory('${cat.id}')`}">
+        <span>${cat.name}</span>
+        ${cat.comingSoon ? '<span style="font-size:9px;color:var(--text-muted);">SOON</span>' : (liveCount ? `<span style="font-size:10px;color:#eb3d3d;">${liveCount} live</span>` : '')}
+      </div>`;
+      if (cat.comingSoon) {
+        html += `<div class="sidebar-item" style="opacity:.5;cursor:default;"><span style="flex:1;font-size:13px;color:var(--text-muted);">Coming soon</span></div>`;
+      } else {
+        html += sorted.map(s => {
+          const d = data[s.username];
+          const isLive = d?.isLive;
+          const name = d?.displayName || s.display;
+          const ini = initials(name);
+          const isActive = currentPlayer === s.username;
+          return `<div class="sidebar-item${isActive ? ' active' : ''}" onclick="openPlayer('${s.username}')">
+            <div class="sidebar-avatar">
+              ${d?.avatar ? `<img src="${d.avatar}" alt="${name}" onerror="this.style.display='none';this.parentNode.innerText='${ini}'"/>` : ini}
+            </div>
+            <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${name}</span>
+            ${isLive ? `<span class="sidebar-viewers">${fv(d.viewers)}</span><span class="live-dot"></span>` : `<span class="live-dot hidden"></span>`}
+          </div>`;
+        }).join('');
+      }
+    });
+    sb.innerHTML = html;
   }
 
   function renderLiveCount() {
@@ -2458,6 +2554,11 @@
     }
   }
 
+  function goLanding() {
+    currentCategory = null;
+    goHome();
+  }
+
   function goHome() {
     closeSidebar();
     currentPlayer = null;
@@ -2467,6 +2568,15 @@
     document.getElementById('main-view').classList.remove('hidden');
     document.getElementById('player-view').classList.remove('active');
     document.getElementById('portfolio-view').classList.remove('active');
+    // Return to the category the user was in, or the landing if none.
+    if (currentCategory) {
+      document.getElementById('category-landing').style.display = 'none';
+      document.getElementById('category-streamers').style.display = 'block';
+    } else {
+      document.getElementById('category-streamers').style.display = 'none';
+      document.getElementById('category-landing').style.display = 'block';
+      renderCategoryGrid();
+    }
     renderSidebar();
   }
 
