@@ -164,8 +164,8 @@
     .pf-tab { background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary); padding: 8px 18px; border-radius: 6px; cursor: pointer; }
     .pf-tab.active { background: var(--bg-card); color: #fff; }
     @media (max-width: 640px) { .pf-cards { grid-template-columns: 1fr; } .pf-card-big { font-size: 24px; } }
-    .portfolio-header-row { display: grid; grid-template-columns: 1.4fr 1.2fr 1.3fr 1.3fr 1fr 1.3fr 1.2fr; padding: 14px 20px; background: var(--bg-nav); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-    .portfolio-data-row { display: grid; grid-template-columns: 1.4fr 1.2fr 1.3fr 1.3fr 1fr 1.3fr 1.2fr; padding: 16px 20px; border-bottom: 1px solid var(--border); font-size: 14px; align-items: center; }
+    .portfolio-header-row { display: grid; grid-template-columns: 1.2fr 1.1fr 1.2fr 1.2fr 0.9fr 0.9fr 1.1fr 1.1fr; padding: 14px 20px; background: var(--bg-nav); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    .portfolio-data-row { display: grid; grid-template-columns: 1.2fr 1.1fr 1.2fr 1.2fr 0.9fr 0.9fr 1.1fr 1.1fr; padding: 16px 20px; border-bottom: 1px solid var(--border); font-size: 14px; align-items: center; }
     .portfolio-data-row:last-child { border-bottom: none; }
     .claim-btn { background: var(--yes-green); color: #0a0b0e; border: none; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; transition: opacity 0.15s; }
     .claim-btn:hover { opacity: 0.88; }
@@ -777,6 +777,7 @@
         <span>Date</span>
         <span>Your Pick</span>
         <span>Outcome</span>
+        <span>Result</span>
         <span>Stake</span>
         <span>Status</span>
         <span style="text-align: right;">Action</span>
@@ -1419,33 +1420,56 @@
 
         const canClaim = !alreadyClaimed && claimable > 0n && (status === MKT.Settled || status === MKT.Voided);
 
+        // The claim button attaches to ONE row per market (claim resolves the
+        // whole market at once). Choose the winning bracket's row for a settled
+        // market; for a voided market, the first row.
+        let claimRowIdx = 0;
+        if (status === MKT.Settled) {
+          const wi = picks.findIndex(p => p.b === winBracket);
+          claimRowIdx = wi >= 0 ? wi : -1; // -1 => no winning bracket among picks
+        }
+
         // Build one row object per picked bracket.
         const marketRows = picks.map(function(pick, rowIdx) {
           const pickLabel = labels ? labels[pick.b] : ('Bracket ' + pick.b);
+          const betWon = (status === MKT.Settled && pick.b === winBracket);
 
-          // Outcome for THIS bracket.
+          // Outcome = the winning bracket (what actually resolved).
           let outcomeText, outcomeColor;
-          if (status === MKT.Active) {
-            outcomeText = 'In play'; outcomeColor = 'var(--text-secondary)';
-          } else if (status === MKT.Voided) {
-            outcomeText = 'Refunded'; outcomeColor = '#f5a623';
-          } else {
-            const won = (pick.b === winBracket);
-            outcomeText = won ? ('Won · ' + (winLabel || '')) : 'Lost';
-            outcomeColor = won ? 'var(--green-text)' : 'var(--text-muted)';
+          if (status === MKT.Active)      { outcomeText = 'Pending'; outcomeColor = 'var(--text-muted)'; }
+          else if (status === MKT.Voided) { outcomeText = 'Voided'; outcomeColor = '#f5a623'; }
+          else                            { outcomeText = (winLabel || '—'); outcomeColor = 'var(--text-primary)'; }
+
+          // Result = did THIS bet win or lose.
+          let resultText, resultColor;
+          if (status === MKT.Active)      { resultText = 'In play'; resultColor = 'var(--text-secondary)'; }
+          else if (status === MKT.Voided) { resultText = 'Refunded'; resultColor = '#f5a623'; }
+          else {
+            resultText = betWon ? 'Won' : 'Lost';
+            resultColor = betWon ? 'var(--green-text,#1ec77a)' : '#e5484d';
           }
 
-          // Claim button only on the first row of a market (claim resolves the
-          // whole market at once); other rows show a muted marker.
+          // Action: reflects THIS bet's state.
+          //  - active bet -> "In play"
+          //  - lost bet   -> "Nothing to claim"
+          //  - winning/refundable bet -> claim button on the claim row only
           let actionHtml;
-          if (rowIdx === 0) {
+          if (status === MKT.Active) {
+            actionHtml = '<button class="claim-btn" disabled>In play</button>';
+          } else if (status === MKT.Settled && !betWon) {
+            actionHtml = '<button class="claim-btn" disabled>Nothing to claim</button>';
+          } else if (rowIdx === claimRowIdx) {
+            // winning bet (settled) or first row (voided refund)
             actionHtml = alreadyClaimed
               ? '<button class="claim-btn" disabled>Claimed</button>'
               : (canClaim
                   ? '<button class="claim-btn" data-id="' + id + '" onclick="claimOnChainBtn(this)">Claim $' + claimableUsd + '</button>'
-                  : '<button class="claim-btn" disabled>' + (status === MKT.Active ? 'In play' : 'Nothing to claim') + '</button>');
+                  : '<button class="claim-btn" disabled>Nothing to claim</button>');
           } else {
-            actionHtml = '<span style="color:var(--text-muted);font-size:11px;">same market ↑</span>';
+            // voided market, non-first row -> part of the same refund
+            actionHtml = alreadyClaimed
+              ? '<button class="claim-btn" disabled>Claimed</button>'
+              : '<span style="color:var(--text-muted);font-size:11px;">Refunds together ↑</span>';
           }
 
           const rowHtml = '<div class="portfolio-data-row">' +
@@ -1453,6 +1477,7 @@
             '<span style="color:var(--text-secondary);">' + dateStr + '</span>' +
             '<span>' + pickLabel + '</span>' +
             '<span style="color:' + outcomeColor + ';font-weight:500;">' + outcomeText + '</span>' +
+            '<span style="color:' + resultColor + ';font-weight:700;">' + resultText + '</span>' +
             '<span>$' + pick.stake.toFixed(2) + '</span>' +
             '<span style="color:' + statusColor + ';font-weight:500;">' + statusText + '</span>' +
             '<div style="text-align:right;">' + actionHtml + '</div>' +
@@ -1461,8 +1486,8 @@
           return {
             id, status, rowHtml,
             stake: pick.stake,
-            claimable: rowIdx === 0 ? (Number(claimable) / 1e6) : 0,
-            won: (status === MKT.Settled && pick.b === winBracket),
+            claimable: rowIdx === claimRowIdx ? (Number(claimable) / 1e6) : 0,
+            won: betWon,
             alreadyClaimed
           };
         });
