@@ -362,9 +362,9 @@
     .bucket-row-item:last-child { border-bottom: none; }
     .bucket-row-item { cursor: pointer; }
     .bucket-row-item:hover { background: rgba(255,255,255,.03); }
-    .bucket-row-item.selected { background: rgba(123, 63, 228, 0.12); box-shadow: inset 3px 0 0 var(--polygon-purple, #7b3fe4); }
+    .bucket-row-item.selected { background: rgba(123, 63, 228, 0.16); box-shadow: inset 4px 0 0 var(--polygon-purple, #7b3fe4); border: 1px solid rgba(123,63,228,.5); border-radius: 8px; }
     .bucket-row-item.selected .bucket-row-title { color: #fff; }
-    .bucket-row-item.selected .bucket-row-title::before { content: '✓ '; color: var(--polygon-purple, #7b3fe4); font-weight: 800; }
+    .bucket-row-item.selected .bucket-row-title::after { content: 'SELECTED'; margin-left: 10px; font-size: 9px; font-weight: 800; letter-spacing: .06em; background: var(--polygon-purple, #7b3fe4); color: #fff; padding: 3px 7px; border-radius: 5px; vertical-align: middle; }
     .bucket-row-item.selected .row-bet-btn.yes { background: var(--polygon-purple, #7b3fe4); border-color: var(--polygon-purple, #7b3fe4); color: #fff; }
 
     .bucket-row-title {
@@ -431,6 +431,10 @@
       gap: 16px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.25);
     }
+    .slip-selected-bracket { display: flex; align-items: center; gap: 10px; background: linear-gradient(135deg, rgba(123,63,228,.22), rgba(123,63,228,.08)); border: 1.5px solid var(--polygon-purple, #7b3fe4); border-radius: 12px; padding: 14px 16px; }
+    .slip-selected-bracket .ssb-label { font-size: 10px; font-weight: 800; letter-spacing: .07em; color: #b794f6; text-transform: uppercase; }
+    .slip-selected-bracket .ssb-value { font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.4px; margin-left: auto; }
+    .slip-selected-bracket .ssb-tag { font-size: 11px; color: var(--text-muted); }
     .order-market-title-heading {
       font-size: 15px;
       font-weight: 600;
@@ -616,14 +620,16 @@
     .pmh-row { font-size: 13px; color: var(--text-secondary); padding: 12px 4px; border-bottom: 1px solid var(--border); }
     .pmh-row:last-child { border-bottom: none; }
     .market-live-info { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
-    .mli-viewers { display: flex; align-items: baseline; gap: 8px; }
-    .mli-viewers .lv-dot { width: 9px; height: 9px; align-self: center; }
-    .mli-count { font-size: 24px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; }
-    .mli-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+    .player-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--border); }
+    .mli-viewers { display: flex; align-items: center; gap: 9px; background: rgba(229,72,77,.08); border: 1px solid rgba(229,72,77,.25); border-radius: 10px; padding: 8px 12px; }
+    .mli-viewers .lv-dot { width: 10px; height: 10px; align-self: center; }
+    .mli-count { font-size: 27px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+    .mli-label { font-size: 10px; font-weight: 700; color: #ff7a7d; text-transform: uppercase; letter-spacing: .06em; }
     .mli-timing { display: flex; gap: 8px; flex-wrap: wrap; }
-    .mli-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    .mli-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; padding: 7px 11px; font-size: 12px; font-weight: 700; }
     .mli-chip svg { width: 13px; height: 13px; }
-    .mli-chip.live { color: #4a9eff; border-color: rgba(74,158,255,.4); }
+    #mli-betting { background: rgba(74,158,255,.12); border: 1px solid rgba(74,158,255,.45); color: #4a9eff; }
+    #mli-settle { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary); }
     @media (max-width: 640px) { .pmh-header span:nth-child(2), .pmh-row span:nth-child(2) { display:none; } }
     #fund-modal { position: relative; width: 100%; max-width: 440px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 26px 24px 22px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
     .fund-modal-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); font-size: 26px; line-height: 1; cursor: pointer; }
@@ -816,6 +822,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           Back
         </button>
+        <img id="player-avatar" class="player-avatar" src="" alt="" style="display:none;" />
         <span class="player-streamer-name" id="player-name"></span>
         <span class="player-badge" id="player-live-badge" style="display:none">LIVE</span>
       </div>
@@ -1857,9 +1864,10 @@
     const slipContainer = document.getElementById('order-slip-container');
     slipContainer.innerHTML = `
       <div class="order-slip-card">
-        <div style="display:flex; flex-direction:column; gap:4px;">
-          <span class="order-slip-sub-label">Predicted viewer bracket</span>
-          <span class="order-market-title-heading">${label}</span>
+        <div class="slip-selected-bracket">
+          <span class="ssb-label">YOUR PICK</span>
+          <span class="ssb-value">${label}</span>
+          <span class="ssb-tag">viewers</span>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:6px;">
@@ -2271,10 +2279,15 @@
     const liveBadge = document.getElementById('player-live-badge');
     const mliCount = document.getElementById('mli-viewers-count');
     const mliInfo = document.getElementById('market-live-info');
+    const avatarEl = document.getElementById('player-avatar');
+    if (avatarEl) {
+      if (d?.avatar) { avatarEl.src = d.avatar; avatarEl.style.display = ''; }
+      else { avatarEl.style.display = 'none'; }
+    }
     if (d?.isLive) {
       liveBadge.style.display = 'inline-block';
       if (mliInfo) mliInfo.style.display = 'flex';
-      if (mliCount) mliCount.textContent = Number(d.viewers || 0).toLocaleString();
+      if (mliCount) mliCount.textContent = Number(d.viewers || 0).toLocaleString('en-US');
     } else {
       liveBadge.style.display = 'none';
       if (mliInfo) mliInfo.style.display = 'none';
