@@ -1189,7 +1189,12 @@
   }
 
 
-  let streamers = (JSON.parse(localStorage.getItem('mykick_streamers') || 'null') || [
+  // Bump this when the hardcoded streamer list changes so stale localStorage
+  // caches are discarded and everyone gets the new list (e.g. the CS2 add).
+  const STREAMERS_VERSION = '2026-06-11-cs2';
+  const _cachedVer = localStorage.getItem('mykick_streamers_ver');
+  const _cached = (_cachedVer === STREAMERS_VERSION) ? JSON.parse(localStorage.getItem('mykick_streamers') || 'null') : null;
+  let streamers = (_cached || [
     { username: 'haddzy',       display: 'Haddzy',        category: 'casino' },
     { username: 'kyrza',       display: 'KYRZA',          category: 'casino' },
     { username: 'donkasjo',       display: 'DonKasjo',    category: 'casino' },
@@ -1204,14 +1209,57 @@
     { username: 'auslots',       display: 'auslots',      category: 'casino' },
     { username: 'generalqw77',       display: 'generalqw77', category: 'casino' },
     { username: 'roshtein',       display: 'roshtein',    category: 'casino' },
-    { username: 'maherco',       display: 'maherco',      category: 'casino' },
-    { username: 'kyootbot',      display: 'Kyootbot',     category: 'casino' }
+    { username: 'kyootbot',      display: 'Kyootbot',     category: 'casino' },
+    // ---- CS2 ----
+    { username: 'spreen',        display: 'Spreen',        category: 'cs2' },
+    { username: 'abai',          display: 'Abai',          category: 'cs2' },
+    { username: 'eray',          display: 'Eray',          category: 'cs2' },
+    { username: 'maherco',       display: 'Maherco',       category: 'cs2' },
+    { username: 'hype',          display: 'Hype',          category: 'cs2' },
+    { username: 'xamutz',        display: 'Xamutz',        category: 'cs2' },
+    { username: 'jahrein',       display: 'Jahrein',       category: 'cs2' },
+    { username: 'wtcn',          display: 'wtcN',          category: 'cs2' },
+    { username: 'rammus53',      display: 'Rammus53',      category: 'cs2' },
+    { username: 'gaules',        display: 'Gaules',        category: 'cs2' },
+    { username: 'goncho',        display: 'Goncho',        category: 'cs2' },
+    { username: 'raydin',        display: 'Raydin',        category: 'cs2' },
+    { username: 'zeko',          display: 'Zeko',          category: 'cs2' },
+    { username: 'niter',         display: 'Niter',         category: 'cs2' },
+    { username: 'cheesur',       display: 'Cheesur',       category: 'cs2' },
+    { username: 'noxxuz',        display: 'Noxxuz',        category: 'cs2' },
+    { username: 'imorr',         display: 'Imorr',         category: 'cs2' },
+    { username: 'neexcsgo',      display: 'NeexCSGO',      category: 'cs2' },
+    { username: 'mokrysuchar',   display: 'MokrySuchar',   category: 'cs2' },
+    { username: 'panky',         display: 'Panky',         category: 'cs2' },
+    { username: 'wulan',         display: 'Wulan',         category: 'cs2' },
+    { username: 'mellstroylive282', display: 'Mellstroy',  category: 'cs2' },
+    { username: 'banduracartel', display: 'BanduraCartel', category: 'cs2' },
+    { username: 'mwia_mn',       display: 'Mwia',          category: 'cs2' },
+    { username: 'helm139bars',   display: 'Helm139bars',   category: 'cs2' },
+    { username: 'chips',         display: 'Chips',         category: 'cs2' },
+    { username: 'mio',           display: 'Mio',           category: 'cs2' },
+    { username: 'benjez',        display: 'Benjez',        category: 'cs2' },
+    { username: 'rybsonlol',     display: 'RybsonLOL',     category: 'cs2' },
+    { username: 'vector',        display: 'Vector',        category: 'cs2' },
+    { username: 'matthewdota',   display: 'MatthewDota',   category: 'cs2' },
+    { username: 'theburntpeanut',display: 'TheBurntPeanut',category: 'cs2' },
+    { username: 'baldu',         display: 'Baldu',         category: 'cs2' },
+    { username: 'gabbidota',     display: 'GabbiDota',     category: 'cs2' },
+    { username: 'keoxer',        display: 'Keoxer',        category: 'cs2' },
+    { username: 'baboli',        display: 'Baboli',        category: 'cs2' },
+    { username: 'abughazi',      display: 'AbuGhazi',      category: 'cs2' },
+    { username: 'locostyledota', display: 'LocoStyleDota', category: 'cs2' },
+    { username: 'forg1',         display: 'Forg1',         category: 'cs2' },
+    { username: 'freeze',        display: 'Freeze',        category: 'cs2' },
+    { username: 'grafo',         display: 'Grafo',         category: 'cs2' }
   ]).map(s => ({ ...s, category: s.category || 'casino' }));
 
-  // Category definitions. Casino is live; Chess is a coming-soon placeholder.
+  // Category definitions. Casino & CS2 are live; Chess is coming soon.
   const CATEGORIES = [
     { id: 'casino', name: 'Casino & Slots', tag1: 'Slots', tag2: 'Live', comingSoon: false,
       art: 'linear-gradient(135deg,#7b3fe4,#3a1d6e)' },
+    { id: 'cs2',    name: 'Counter-Strike 2', tag1: 'FPS', tag2: 'Live', comingSoon: false,
+      art: 'linear-gradient(135deg,#f5a623,#a8631a)' },
     { id: 'chess',  name: 'Chess', tag1: 'Strategy', tag2: 'Soon', comingSoon: true,
       art: 'linear-gradient(135deg,#1ec77a,#0d5c3a)' }
   ];
@@ -1230,7 +1278,7 @@
   let activeEthersProviderInstance = null;
   let selectedActiveWalletProvider = null;
 
-  function save() { localStorage.setItem('mykick_streamers', JSON.stringify(streamers)); }
+  function save() { localStorage.setItem('mykick_streamers', JSON.stringify(streamers)); localStorage.setItem('mykick_streamers_ver', STREAMERS_VERSION); }
   function saveBets() { localStorage.setItem('mykick_bets', JSON.stringify(activeBetPositionsArray)); }
 
   /* UNIVERSAL MODAL TOGGLE PIPELINES */
