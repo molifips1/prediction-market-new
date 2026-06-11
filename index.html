@@ -1947,24 +1947,43 @@
     // If betting has closed (sampling / settle / resolved), show a status banner
     // instead of bet buttons — markets are read-only past the betting window.
     if (!bettingOpen || status !== MKT.Active) {
-      let banner;
       let slipPhase = 'sampling';
+      let headline, sub, icon, accent;
       if (status === MKT.Settled) {
-        banner = 'Market resolved — winning bracket: <b>' + (labels[Number(mkt.winningBracket)] || '?') + '</b>';
         slipPhase = 'settled';
+        headline = 'This round has resolved';
+        sub = 'Winning bracket: <b>' + (labels[Number(mkt.winningBracket)] || '?') + '</b>. A new betting round opens shortly — check back in a moment.';
+        icon = '<path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>';
+        accent = 'var(--green-text,#1ec77a)';
       } else if (status === MKT.Voided) {
-        banner = 'Market voided — all stakes are refundable from your Portfolio.';
         slipPhase = 'voided';
+        headline = 'This round was voided';
+        sub = 'All stakes are refundable from your Portfolio. A new betting round will open shortly.';
+        icon = '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
+        accent = '#f5a623';
       } else {
-        banner = 'Betting is closed for this market. Sampling viewer counts, settling soon.';
         slipPhase = 'sampling';
+        headline = 'Betting closed for this round';
+        const settleMs = Number(mkt.settleTime) * 1000;
+        const minsLeft = Math.max(0, Math.ceil((settleMs - Date.now()) / 60000));
+        sub = 'The round is in progress — the oracle is now counting viewers to settle it' +
+              (minsLeft > 0 ? '. <b>A new round you can bet on opens in about ' + minsLeft + ' min.</b>' : '. <b>A new round opens shortly.</b>') +
+              ' Nothing is broken — just wait for the next round.';
+        icon = '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>';
+        accent = '#4a9eff';
       }
       resetOrderSlipDefault(slipPhase);
       container.innerHTML =
-        '<div style="padding:12px 14px;margin-bottom:10px;border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:13px;">' + banner + '</div>' +
+        '<div style="display:flex;gap:14px;align-items:flex-start;padding:18px 18px;margin-bottom:14px;border:1px solid var(--border);border-left:3px solid ' + accent + ';border-radius:10px;background:var(--bg-card);">' +
+          '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="' + accent + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-top:1px;">' + icon + '</svg>' +
+          '<div><div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:4px;">' + headline + '</div>' +
+          '<div style="font-size:13px;color:var(--text-secondary);line-height:1.5;">' + sub + '</div></div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600;padding:4px 2px 8px;">This round\u2019s brackets</div>' +
         labels.map(function(lab, i) {
-          return '<div class="bucket-row-item" id="card-b' + i + '">' +
-            '<span class="bucket-row-title">' + lab + (i === window._currentMarket.winningBracket && status === MKT.Settled ? ' ✓' : '') + '</span>' +
+          const isWin = (i === window._currentMarket.winningBracket && status === MKT.Settled);
+          return '<div class="bucket-row-item" id="card-b' + i + '" style="opacity:.7;">' +
+            '<span class="bucket-row-title">' + lab + (isWin ? ' ✓' : '') + '</span>' +
             '<span class="bucket-row-volume">Pool: $' + poolUsd[i].toFixed(2) + '</span>' +
             '</div>';
         }).join('');
@@ -2068,23 +2087,37 @@
 
     // Resolved / closed -> read-only banner + rows (mirror casino).
     if (!bettingOpen || status !== CHESS_MKT.Active) {
-      let banner, slipPhase = 'sampling';
+      let slipPhase = 'sampling';
+      let headline, sub, icon, accent;
       if (status === CHESS_MKT.Settled) {
-        banner = 'Match resolved — ' + (Number(mkt.winningOutcome) === 1 ? '<b>' + displayName + ' won</b>' : '<b>' + displayName + ' lost</b>');
         slipPhase = 'settled';
+        headline = 'This match has resolved';
+        sub = (Number(mkt.winningOutcome) === 1 ? '<b>' + displayName + ' won.</b>' : '<b>' + displayName + ' lost.</b>') + ' Check your Portfolio to claim. A market for the next match opens when they queue again.';
+        icon = '<path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>';
+        accent = 'var(--green-text,#1ec77a)';
       } else if (status === CHESS_MKT.Voided) {
-        banner = 'Market voided — all stakes are refundable from your Portfolio.';
         slipPhase = 'voided';
+        headline = 'This match market was voided';
+        sub = 'All stakes are refundable from your Portfolio. A market for the next match opens when they queue again.';
+        icon = '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
+        accent = '#f5a623';
       } else {
-        banner = 'Betting is closed — the match is underway, settling on the result.';
         slipPhase = 'sampling';
+        headline = 'Betting closed — match underway';
+        sub = 'Betting for this match has closed and it\u2019s being played out now. <b>A new market opens for ' + displayName + '\u2019s next match.</b> Nothing is broken — just wait for the next one.';
+        icon = '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>';
+        accent = '#4a9eff';
       }
       resetOrderSlipDefault(slipPhase);
       container.innerHTML =
-        '<div style="padding:12px 14px;margin-bottom:10px;border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:13px;">' + banner + '</div>' +
+        '<div style="display:flex;gap:14px;align-items:flex-start;padding:18px 18px;margin-bottom:14px;border:1px solid var(--border);border-left:3px solid ' + accent + ';border-radius:10px;background:var(--bg-card);">' +
+          '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="' + accent + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-top:1px;">' + icon + '</svg>' +
+          '<div><div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:4px;">' + headline + '</div>' +
+          '<div style="font-size:13px;color:var(--text-secondary);line-height:1.5;">' + sub + '</div></div>' +
+        '</div>' +
         labels.map(function(lab, i) {
           const isWin = (i === Number(mkt.winningOutcome) && status === CHESS_MKT.Settled);
-          return '<div class="bucket-row-item" id="card-b' + i + '">' +
+          return '<div class="bucket-row-item" id="card-b' + i + '" style="opacity:.7;">' +
             '<span class="bucket-row-title">' + lab + (isWin ? ' ✓' : '') + '</span>' +
             '<span class="bucket-row-volume">Pool: $' + poolUsd[i].toFixed(2) + '</span>' +
             '</div>';
@@ -2150,15 +2183,15 @@
     let msg = 'Select a viewer bracket below to place your bet.';
     let icon = '';
     if (phase === 'sampling') {
-      heading = 'Market in progress';
+      heading = 'Round in progress';
       icon = '<div class="slip-status-dot"></div>';
-      msg = 'Betting is closed. The oracle is now sampling the live viewer count once per minute and will settle this market shortly.';
+      msg = 'Betting is closed for this round and the result is being counted. This is normal — a new round you can bet on opens shortly. Nothing is broken.';
     } else if (phase === 'settled') {
-      heading = 'Market resolved';
-      msg = 'This market has settled. Check your Portfolio to claim any winnings.';
+      heading = 'Round resolved';
+      msg = 'This round has settled — check your Portfolio to claim any winnings. A new betting round opens shortly.';
     } else if (phase === 'voided') {
-      heading = 'Market voided';
-      msg = 'This market was voided. All stakes are refundable from your Portfolio.';
+      heading = 'Round voided';
+      msg = 'This round was voided; all stakes are refundable from your Portfolio. A new round opens shortly.';
     }
     slipContainer.innerHTML = `
       <div class="order-slip-card">
