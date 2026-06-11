@@ -911,7 +911,7 @@
         </div>
 
         <div>
-          <div class="market-section-header">Predict Viewer Brackets</div>
+          <div class="market-section-header" id="market-section-header">Predict Viewer Brackets</div>
           <div class="market-buckets-list-wrapper" id="market-buckets-list">
             </div>
         </div>
@@ -1133,6 +1133,34 @@
   // Market status enum mirrors the contract: Active=0, Settled=1, Voided=2.
   const MKT = { Active: 0, Settled: 1, Voided: 2 };
 
+  // ---- CS2 / chess N-outcome contract (StreamSlushChess, Amoy) ----
+  // Used for YES/NO match-win markets. Status enum differs:
+  // Active=0, BettingClosed=1, Settled=2, Voided=3.
+  const CHESS_CONTRACT_ADDRESS = '0xb8eb7956830305a533Fa3fD2119Ff969D4b3d2A6';
+  const CHESS_MKT = { Active: 0, BettingClosed: 1, Settled: 2, Voided: 3 };
+  const CHESS_ABI = [
+    "function placeBet(uint256 id, uint8 outcome, uint256 amount) external",
+    "function claim(uint256 id) external",
+    "function marketCount() view returns (uint256)",
+    "function getMarket(uint256 id) view returns (uint8 kind, uint8 numOutcomes, uint8 winningOutcome, uint8 status, uint64 openTime, uint64 claimableAt, uint32 line, uint32 finalMoves, uint256 totalPool)",
+    "function getOutcomePools(uint256 id) view returns (uint256[])",
+    "function bettingOpen(uint256 id) view returns (bool)",
+    "function previewClaim(uint256 id, address user) view returns (uint256)",
+    "function stakeOf(uint256 id, uint8 outcome, address user) view returns (uint256)",
+    "function totalStakedBy(uint256 id, address user) view returns (uint256)",
+    "function claimed(uint256 id, address user) view returns (bool)",
+    "event BetPlaced(uint256 indexed id, address indexed user, uint8 indexed outcome, uint256 amount)"
+  ];
+  async function getChessReadContract() {
+    const provider = await getWorkingProvider();
+    return new ethers.Contract(CHESS_CONTRACT_ADDRESS, CHESS_ABI, provider);
+  }
+  // Helper: is this streamer a CS2 (match-bet) streamer?
+  function isCs2(username) {
+    const s = streamers.find(x => x.username === username);
+    return s && s.category === 'cs2';
+  }
+
   // Read-only provider for Amoy (with fallbacks).
   const AMOY_RPCS = [
     'https://rpc-amoy.polygon.technology',
@@ -1172,6 +1200,31 @@
   }
   async function getActiveMarketId(username) {
     const map = await getMarketsMap();
+    const entry = map[username];
+    if (!entry || entry.activeMarketId == null) return null;
+    return entry.activeMarketId;
+  }
+
+  // ---- CS2: streamer -> active match-market id, served by the CS2 oracle ----
+  // The CS2 oracle (FACEIT-driven) serves /cs2-markets. Until it's deployed this
+  // fetch fails gracefully and the UI shows "no active match".
+  let _cs2Cache = { ts: 0, data: null };
+  async function getCs2MarketsMap() {
+    const nowMs = Date.now();
+    if (_cs2Cache.data && nowMs - _cs2Cache.ts < 15000) return _cs2Cache.data;
+    try {
+      const res = await fetch(WORKER_URL.replace(/\/$/, '') + '/cs2-markets', { cache: 'no-store' });
+      if (!res.ok) throw new Error('no cs2 endpoint');
+      const json = await res.json();
+      _cs2Cache = { ts: nowMs, data: json.streamers || {} };
+      return _cs2Cache.data;
+    } catch (e) {
+      _cs2Cache = { ts: nowMs, data: {} };
+      return {};
+    }
+  }
+  async function getCs2MarketId(username) {
+    const map = await getCs2MarketsMap();
     const entry = map[username];
     if (!entry || entry.activeMarketId == null) return null;
     return entry.activeMarketId;
@@ -1231,8 +1284,11 @@
     { username: 'neexcsgo',      display: 'NeexCSGO',      category: 'cs2' },
     { username: 'mokrysuchar',   display: 'MokrySuchar',   category: 'cs2' },
     { username: 'panky',         display: 'Panky',         category: 'cs2' },
+    { username: 'wulan',         display: 'Wulan',         category: 'cs2' },
     { username: 'mellstroylive282', display: 'Mellstroy',  category: 'cs2' },
     { username: 'banduracartel', display: 'BanduraCartel', category: 'cs2' },
+    { username: 'mwia_mn',       display: 'Mwia',          category: 'cs2' },
+    { username: 'helm139bars',   display: 'Helm139bars',   category: 'cs2' },
     { username: 'chips',         display: 'Chips',         category: 'cs2' },
     { username: 'mio',           display: 'Mio',           category: 'cs2' },
     { username: 'benjez',        display: 'Benjez',        category: 'cs2' },
@@ -1245,6 +1301,7 @@
     { username: 'keoxer',        display: 'Keoxer',        category: 'cs2' },
     { username: 'baboli',        display: 'Baboli',        category: 'cs2' },
     { username: 'abughazi',      display: 'AbuGhazi',      category: 'cs2' },
+    { username: 'locostyledota', display: 'LocoStyleDota', category: 'cs2' },
     { username: 'forg1',         display: 'Forg1',         category: 'cs2' },
     { username: 'freeze',        display: 'Freeze',        category: 'cs2' },
     { username: 'grafo',         display: 'Grafo',         category: 'cs2' }
@@ -1829,7 +1886,9 @@
 
   /* RE-RENDER STACKED LIST BRACKETS — reads live volumes + baseViewerCount from chain */
   async function loadMarketLayout(username) {
+    if (isCs2(username)) { return loadCs2MarketLayout(username); }
     const container = document.getElementById('market-buckets-list');
+    const _hdr = document.getElementById('market-section-header'); if (_hdr) _hdr.textContent = 'Predict Viewer Brackets';
     const streamInfo = data[username];
     const prevSelection = activeMarketSelection;  // preserve across refreshes
     activeMarketSelection = null;
@@ -1929,6 +1988,125 @@
     labels.forEach(function(lab, i) {
       // Parimutuel "odds": if this bracket wins, payout multiple ≈ totalPool / bracketPool
       // (minus the 2% fee). Shown as e.g. "2.4x". If empty, show "—".
+      const mult = poolUsd[i] > 0 ? (totalPoolUsd / poolUsd[i]) * 0.98 : 0;
+      infoMap['b' + i] = { idx: i, label: lab, poolUsd: poolUsd[i], mult: mult };
+      const volEl = document.getElementById('vol-b' + i);
+      const barEl = document.getElementById('bar-b' + i);
+      const betBtn = document.getElementById('btn-bet-b' + i);
+      if (volEl) volEl.innerHTML = '<span>Pool $' + poolUsd[i].toFixed(2) + '</span>' +
+        '<span class="bv-odds">' + (mult > 0 ? mult.toFixed(2) + 'x' : '—') + '</span>';
+      if (barEl) barEl.style.width = ((poolUsd[i] / maxPool) * 100).toFixed(1) + '%';
+      if (betBtn) {
+        betBtn.disabled = false;
+        betBtn.textContent = 'Bet';
+        betBtn.onclick = (function(bid, bidx, blabel){ return function(){ selectBetSlip(bid, bidx, blabel); }; })('b' + i, i, lab);
+      }
+      const rowEl = document.getElementById('card-b' + i);
+      if (rowEl) {
+        rowEl.classList.remove('skeleton-row');
+        rowEl.onclick = (function(bid, bidx, blabel){ return function(e){ if (e.target.closest('.row-bet-btn')) return; selectBetSlip(bid, bidx, blabel); }; })('b' + i, i, lab);
+      }
+    });
+
+    applyDefaultSelection(labels.map((lab, i) => ({ id: 'b' + i, idx: i, label: lab })), infoMap, prevSelection);
+  }
+
+  // ---- CS2 match-win market (YES/NO), same layout as the casino card ----
+  async function loadCs2MarketLayout(username) {
+    const container = document.getElementById('market-buckets-list');
+    const _hdr = document.getElementById('market-section-header'); if (_hdr) _hdr.textContent = 'Predict Match Winner';
+    const streamInfo = data[username];
+    const prevSelection = activeMarketSelection;
+    activeMarketSelection = null;
+    const isLive = streamInfo?.isLive;
+    const displayName = streamInfo?.displayName || (streamers.find(s => s.username === username)?.display) || username;
+
+    const marketId = await getCs2MarketId(username);
+
+    if (!isLive || marketId == null) {
+      resetOrderSlipDefault();
+      const msg = !isLive
+        ? { t: 'Streamer Offline', s: 'Match markets are only available while the streamer is live.' }
+        : { t: 'Waiting for next match', s: 'A win/loss market opens when ' + displayName + ' starts their next match.' };
+      container.innerHTML = '<div class="order-empty-state" style="padding:32px;text-align:center;color:var(--text-muted);">' +
+        '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:.4"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+        '<p style="font-size:14px;font-weight:600;margin-bottom:4px;">' + msg.t + '</p>' +
+        '<p style="font-size:12px;">' + msg.s + '</p>' +
+        '</div>';
+      return;
+    }
+
+    showOrderSlipLoading();
+
+    let mkt, pools, bettingOpen;
+    try {
+      const rc = await getChessReadContract();
+      [mkt, pools, bettingOpen] = await Promise.all([
+        rc.getMarket(marketId),
+        rc.getOutcomePools(marketId),
+        rc.bettingOpen(marketId).catch(() => false)
+      ]);
+    } catch (e) {
+      console.error('Failed to read CS2 market', marketId, e);
+      container.innerHTML = '<div class="order-empty-state" style="padding:32px;text-align:center;color:var(--text-muted);">Could not load match market. Retrying shortly…</div>';
+      return;
+    }
+
+    const status = Number(mkt.status);
+    // Outcome labels for a match-win market: 0 = NO (lose), 1 = YES (win).
+    const labels = ['No — ' + displayName + ' loses', 'Yes — ' + displayName + ' wins'];
+    const poolUsd = pools.map(p => Number(p) / 1e6);
+    const totalPoolUsd = poolUsd.reduce((a, v) => a + v, 0);
+
+    window._currentPools = poolUsd;
+    window._currentMarket = {
+      id: String(marketId), labels, isCs2: true,
+      bettingOpen: !!bettingOpen, status,
+      winningBracket: Number(mkt.winningOutcome),
+      settleTime: 0, openTime: Number(mkt.openTime)
+    };
+
+    // Resolved / closed -> read-only banner + rows (mirror casino).
+    if (!bettingOpen || status !== CHESS_MKT.Active) {
+      let banner, slipPhase = 'sampling';
+      if (status === CHESS_MKT.Settled) {
+        banner = 'Match resolved — ' + (Number(mkt.winningOutcome) === 1 ? '<b>' + displayName + ' won</b>' : '<b>' + displayName + ' lost</b>');
+        slipPhase = 'settled';
+      } else if (status === CHESS_MKT.Voided) {
+        banner = 'Market voided — all stakes are refundable from your Portfolio.';
+        slipPhase = 'voided';
+      } else {
+        banner = 'Betting is closed — the match is underway, settling on the result.';
+        slipPhase = 'sampling';
+      }
+      resetOrderSlipDefault(slipPhase);
+      container.innerHTML =
+        '<div style="padding:12px 14px;margin-bottom:10px;border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:13px;">' + banner + '</div>' +
+        labels.map(function(lab, i) {
+          const isWin = (i === Number(mkt.winningOutcome) && status === CHESS_MKT.Settled);
+          return '<div class="bucket-row-item" id="card-b' + i + '">' +
+            '<span class="bucket-row-title">' + lab + (isWin ? ' ✓' : '') + '</span>' +
+            '<span class="bucket-row-volume">Pool: $' + poolUsd[i].toFixed(2) + '</span>' +
+            '</div>';
+        }).join('');
+      return;
+    }
+
+    // Active + betting open: render 2 outcome rows (same markup as casino).
+    container.innerHTML = labels.map(function(lab, i) {
+      return '<div class="bucket-row-item skeleton-row" id="card-b' + i + '">' +
+        '<span class="bucket-row-title">' + lab + '</span>' +
+        '<div class="bucket-row-meta">' +
+          '<div class="bucket-row-volume" id="vol-b' + i + '"><span>Pool —</span><span class="bv-odds">—</span></div>' +
+          '<div class="bucket-pool-bar"><span id="bar-b' + i + '" style="width:0%"></span></div>' +
+        '</div>' +
+        '<button class="row-bet-btn yes" id="btn-bet-b' + i + '" disabled>Bet</button>' +
+        '</div>';
+    }).join('');
+
+    const infoMap = {};
+    const maxPool = Math.max(0.0001, ...poolUsd);
+    labels.forEach(function(lab, i) {
       const mult = poolUsd[i] > 0 ? (totalPoolUsd / poolUsd[i]) * 0.98 : 0;
       infoMap['b' + i] = { idx: i, label: lab, poolUsd: poolUsd[i], mult: mult };
       const volEl = document.getElementById('vol-b' + i);
@@ -2110,6 +2288,9 @@
 
     const marketId = window._currentMarket.id;
     const bracket  = activeMarketSelection.numericIdx;
+    const useCs2    = !!window._currentMarket.isCs2;
+    const betContractAddr = useCs2 ? CHESS_CONTRACT_ADDRESS : CONTRACT_ADDRESS;
+    const betAbi          = useCs2 ? CHESS_ABI : PREDICTION_MARKET_ABI;
 
     try {
       const providerSource = selectedActiveWalletProvider || window.ethereum;
@@ -2118,7 +2299,7 @@
 
       const rawUsdc = ethers.parseUnits(usd.toString(), 6);
       const token   = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
-      const market  = new ethers.Contract(CONTRACT_ADDRESS, PREDICTION_MARKET_ABI, signer);
+      const market  = new ethers.Contract(betContractAddr, betAbi, signer);
 
       // Enforce the per-wallet cap client-side too (contract also enforces it).
       try {
@@ -2130,10 +2311,10 @@
       } catch (_) {}
 
       toast("Checking USDC allowance...");
-      const allowance = await token.allowance(userWalletAddress, CONTRACT_ADDRESS);
+      const allowance = await token.allowance(userWalletAddress, betContractAddr);
       if (allowance < rawUsdc) {
         toast("Approving USDC...");
-        const approveTx = await token.approve(CONTRACT_ADDRESS, ethers.parseUnits(String(MAX_STAKE_USDC), 6));
+        const approveTx = await token.approve(betContractAddr, ethers.parseUnits(String(MAX_STAKE_USDC), 6));
         await approveTx.wait();
       }
 
@@ -2144,6 +2325,7 @@
       toast("Bet placed! 🎉");
       if (typeof updateNavCash === "function") updateNavCash();
       _marketsCache = { ts: 0, data: null }; // bust the markets cache
+      _cs2Cache = { ts: 0, data: null };
       setTimeout(async function() { if (currentPlayer) await loadMarketLayout(currentPlayer); }, 2500);
       renderPortfolioRows();
 
